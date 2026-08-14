@@ -44,7 +44,12 @@ Faça um site temático do streamer @nethzzzz onde as pessoas podem colocar suge
 - **Perfil dos subs**: rota `/perfil/:nickname` + `GET /api/users/{nickname}/profile` — stats, conquistas/badges (Estrategista, Curador, Cinegrafista, Clipe Lendário, Voz Ativa, Eleitor de Elite, Verificado), jogos sugeridos e clipes; nicknames clicáveis nos cards
 - **Resend com fallback**: tenta enviar do domínio `tropa@nethzcuiudos.dev`; se falhar (domínio ainda "pending" no Resend), usa `onboarding@resend.dev` automaticamente
 
-## Backlog priorizado
+## Implementado — 14/06/2026 (parte 3)
+- **Conforto de navegação**: rolagem suave, scrollbar customizada, foco visível por teclado, respeito a `prefers-reduced-motion`, scroll-to-top automático ao trocar de rota e botão flutuante "voltar ao topo"
+- **Easter egg (pegadinha)**: login com email EXATO `nethzmacio@fakecuiudo.com` + senha EXATA `cuiudomasdou` → tela preta fullscreen por 6s com legendas em sequência ("NETHZZZZZ," / "VOCÊ É" / "MACIO!!!") + áudio estourado (1x) → depois começam downloads infinitos alternando 3 imagens (a cada 500ms) até fechar o navegador; `beforeunload` avisa antes de sair
+  - Mecanismo: `/app/frontend/src/prank.js` + manifesto `/app/frontend/public/prank/manifest.json`; assets em `/public/prank/` (scream.m4a) e `/public/prank/dl/` (macio1.png, macio2.png, macio3.gif)
+  - ⚠️ Navegadores bloqueiam múltiplos downloads automáticos: após o 1º arquivo aparece o aviso "permitir vários downloads?" — se a vítima clicar em permitir, continua infinito
+- Resend revertido para `onboarding@resend.dev` (usuário apagou o domínio nethzcuiudos.dev)
 - P1: Domínio `nethzcuiudos.dev` no Resend ainda com status "pending" — usuário precisa concluir verificação DNS (fallback automático já implementado)
 - P1: Upload persistente de vídeo em storage de objetos
 - P2: Anti-Ban Automático (banir usuário com 3+ denúncias resolvidas)

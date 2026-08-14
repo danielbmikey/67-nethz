@@ -1,8 +1,15 @@
 {
-  "image": "/prank/jumpscare.jpg",
-  "audio": "/prank/scream.mp3",
-  "intervalMs": 600,
+  "audio": "/prank/scream.m4a",
+  "intervalMs": 500,
+  "blackMs": 6000,
+  "captions": [
+    { "at": 300, "text": "NETHZZZZZ," },
+    { "at": 2300, "text": "VOCÊ É" },
+    { "at": 4300, "text": "MACIO!!!" }
+  ],
   "downloads": [
-    "/prank/dl/cuiudo1.jpg"
+    "/prank/dl/macio1.png",
+    "/prank/dl/macio2.png",
+    "/prank/dl/macio3.gif"
   ]
 }
