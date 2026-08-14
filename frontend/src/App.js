@@ -1,29 +1,537 @@
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { BrowserRouter, Link, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Activity, ArrowUp, CalendarDays, Check, ChevronRight, Clapperboard, Flag, Gamepad2, Heart, Instagram, LayoutDashboard, LogIn, MessageCircle, Plus, Radio, Shield, Sparkles, Trophy, Twitch, Twitter, X, Youtube } from "lucide-react";
+import { Activity, ArrowUp, CalendarDays, Check, ChevronRight, Clapperboard, Download, Flag, Gamepad2, Heart, Instagram, LogIn, LogOut, MessageCircle, Plus, Radio, Shield, Sparkles, Trash2, Trophy, Twitch, UserPlus, Users, X, Youtube } from "lucide-react";
 import "@/App.css";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const client = axios.create({ baseURL: API, withCredentials: true });
-const fallback = { games: [], clips: [], polls: [], schedule: [] };
+client.interceptors.request.use((config) => {
+  const token = localStorage.getItem("neth_token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+const AuthContext = createContext(null);
+const useAuth = () => useContext(AuthContext);
+
+function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [modal, setModal] = useState(null); // "login" | "signup" | null
+  useEffect(() => {
+    (async () => {
+      if (!localStorage.getItem("neth_token")) return;
+      try { const r = await client.get("/auth/me"); setUser(r.data); } catch { localStorage.removeItem("neth_token"); }
+    })();
+  }, []);
+  const login = async (email, password) => {
+    const r = await client.post("/auth/login", { email, password });
+    localStorage.setItem("neth_token", r.data.token);
+    setUser(r.data);
+    setModal(null);
+    return r.data;
+  };
+  const signup = async (payload) => {
+    const r = await client.post("/auth/signup", payload);
+    localStorage.setItem("neth_token", r.data.token);
+    setUser(r.data);
+    setModal(null);
+    return r.data;
+  };
+  const logout = async () => {
+    try { await client.post("/auth/logout"); } catch {}
+    localStorage.removeItem("neth_token");
+    setUser(null);
+  };
+  const requireAuth = useCallback((action) => {
+    if (user) { action(); return true; }
+    setModal("login");
+    return false;
+  }, [user]);
+  return <AuthContext.Provider value={{ user, login, signup, logout, modal, setModal, requireAuth }}>{children}{modal && <AuthModal/>}</AuthContext.Provider>;
+}
+
+function AuthModal() {
+  const { modal, setModal, login, signup } = useAuth();
+  const [form, setForm] = useState({ email: "", password: "", nickname: "" });
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const isSignup = modal === "signup";
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr(""); setBusy(true);
+    try {
+      if (isSignup) await signup(form);
+      else await login(form.email, form.password);
+    } catch (ex) { setErr(ex?.response?.data?.detail || "Falhou. Tente novamente."); }
+    finally { setBusy(false); }
+  };
+  return <Modal title={isSignup ? "Entra pra tropa" : "Bem-vindo de volta"} onClose={() => setModal(null)}>
+    <p className="muted" style={{marginTop:-10, marginBottom:20, fontSize:13}}>
+      {isSignup ? "Cria sua conta e comece a sugerir jogos, mandar clipes e comentar." : "Faça login pra votar, comentar e enviar clipes."}
+    </p>
+    <form className="form" onSubmit={submit}>
+      {isSignup && <input required minLength={3} maxLength={24} placeholder="Nickname (3-24 caracteres)" data-testid="auth-nickname-input" value={form.nickname} onChange={e=>setForm({...form,nickname:e.target.value})}/>}
+      <input required type="email" placeholder="Email" data-testid="auth-email-input" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/>
+      <input required type="password" minLength={6} placeholder="Senha (mínimo 6)" data-testid="auth-password-input" value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/>
+      {err && <div className="err" data-testid="auth-error">{err}</div>}
+      <button className="btn primary" disabled={busy} data-testid="auth-submit-button">{isSignup ? <><UserPlus size={16}/> Criar conta</> : <><LogIn size={16}/> Entrar</>}</button>
+    </form>
+    <div className="auth-swap">
+      {isSignup ? <>Já é da tropa? <button data-testid="auth-switch-login" onClick={()=>setModal("login")}>Fazer login</button></> : <>Novo por aqui? <button data-testid="auth-switch-signup" onClick={()=>setModal("signup")}>Criar conta</button></>}
+    </div>
+  </Modal>;
+}
 
 function useCommunity() {
-  const [data, setData] = useState(fallback); const [loading, setLoading] = useState(true);
-  const refresh = async () => { try { const [games, clips, polls, schedule] = await Promise.all(["games", "clips", "polls", "schedule"].map((x) => client.get(`/${x}`))); setData({ games: games.data, clips: clips.data, polls: polls.data, schedule: schedule.data }); } finally { setLoading(false); } };
-  useEffect(() => { refresh(); }, []); return { ...data, loading, refresh };
+  const [data, setData] = useState({ games: [], clips: [], polls: [], schedule: [] });
+  const [loading, setLoading] = useState(true);
+  const refresh = async () => {
+    try {
+      const [games, clips, polls, schedule] = await Promise.all(["games","clips","polls","schedule"].map(x => client.get(`/${x}`)));
+      setData({ games: games.data, clips: clips.data, polls: polls.data, schedule: schedule.data });
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { refresh(); }, []);
+  return { ...data, loading, refresh };
 }
-function Nav() { const loc = useLocation(); return <header className="topbar"><Link to="/" className="brand" data-testid="brand-home"><span className="brand-mark">N</span><span><b>NETHZZZZ</b><small>COMMUNITY HQ</small></span></Link><nav>{[["/","Arena",Gamepad2],["/clips","Clipes",Clapperboard],["/schedule","Agenda",CalendarDays],["/polls","Enquetes",Trophy]].map(([to, label, Icon]) => <Link key={to} data-testid={`nav-${label.toLowerCase()}`} className={loc.pathname === to ? "active" : ""} to={to}><Icon size={16}/>{label}</Link>)}</nav><Link to="/admin" className="admin-link" data-testid="nav-admin"><Shield size={16}/> Moderação</Link></header>; }
-function Layout({ children }) { return <><Nav/><main>{children}</main><footer><span>© 2026 NETHZZZZ HQ</span><span className="live-dot"><i/> COMUNIDADE ONLINE</span><span className="socials"><a href="https://twitch.tv" data-testid="social-twitch"><Twitch size={16}/></a><a href="https://youtube.com" data-testid="social-youtube"><Youtube size={16}/></a><a href="https://instagram.com" data-testid="social-instagram"><Instagram size={16}/></a></span></footer></>; }
-function Hero() { return <section className="hero"><div className="hero-copy"><div className="eyebrow"><i/> TRANSMISSÃO EM BREVE <span>•</span> QUARTA 20:00</div><h1>A Tropa<br/><em>Decide.</em></h1><p>O quartel-general da comunidade do Neth. Sugira o próximo jogo, compartilhe aquele clipe absurdo e faça a live acontecer.</p><div className="hero-actions"><Link className="btn primary" to="/suggest" data-testid="hero-suggest-button"><Plus size={17}/> Sugerir um jogo</Link><Link className="text-link" to="/clips" data-testid="hero-clips-link">Explorar clipes <ChevronRight size={16}/></Link></div></div><div className="hero-art"><div className="scanline"/><span className="avatar-ring">N</span><div className="status-chip"><Radio size={16}/> CHAT ONLINE <b>1.2K</b></div><div className="hero-code">NETH//HQ<br/><span>PLAY. VOTE. REPEAT.</span></div></div></section>; }
-function Statbar({ games, clips }) { return <div className="statbar"><div><span className="stat-icon cyan"><Gamepad2/></span><b>{games.length || 3}</b><small>SUGESTÕES ATIVAS</small></div><div><span className="stat-icon pink"><Clapperboard/></span><b>{clips.length || 2}</b><small>CLIPES DA TROPA</small></div><div><span className="stat-icon yellow"><Activity/></span><b>12.4K</b><small>MEMBROS ONLINE</small></div><div className="quote">“O chat escolhe, o Neth sofre.” <span>— regra #1</span></div></div>; }
-function SuggestionCard({ game, onVote, onComment }) { return <article className="suggestion" data-testid={`suggestion-card-${game.id}`}><div className="vote"><button onClick={() => onVote(game.id)} data-testid={`vote-game-${game.id}`}><ArrowUp size={18}/></button><b>{game.votes}</b><small>VOTOS</small></div><div className="suggestion-body"><div className="card-top"><span className={`tag ${game.status === "Jogado" ? "green" : ""}`}>{game.status}</span><span className="mono">{game.platform}</span></div><h3>{game.title}</h3><p>{game.description}</p><div className="meta"><span>por <b>{game.submitted_by}</b></span><button className="comment-link" onClick={() => onComment(game)} data-testid={`comment-game-${game.id}`}><MessageCircle size={14}/> comentar</button></div></div></article>; }
-function SuggestPage({ community }) { const [open, setOpen] = useState(false); const [selected, setSelected] = useState(null); const [form, setForm] = useState({ title: "", genre: "", description: "", submitted_by: "" }); const submit = async (e) => { e.preventDefault(); await client.post("/games", form); setForm({ title: "", genre: "", description: "", submitted_by: "" }); setOpen(false); community.refresh(); }; const vote = async (id) => { await client.post(`/games/${id}/vote`); community.refresh(); }; return <><Hero/><Statbar games={community.games} clips={community.clips}/><section className="section" id="suggestions"><div className="section-head"><div><div className="eyebrow cyan-text">01 / DECISÃO DO CHAT</div><h2>Sugestões de jogos</h2></div><button className="btn outline" onClick={() => setOpen(true)} data-testid="open-suggestion-modal"><Plus size={16}/> Nova sugestão</button></div><div className="board-grid">{community.games.map((g) => <SuggestionCard key={g.id} game={g} onVote={vote} onComment={setSelected}/>)}</div></section>{selected && <Comments target={selected} onClose={() => setSelected(null)}/>} {open && <Modal title="Coloque um jogo na fila" onClose={() => setOpen(false)}><form onSubmit={submit} className="form"><input required placeholder="Nome do jogo" data-testid="suggestion-title-input" value={form.title} onChange={e => setForm({...form,title:e.target.value})}/><div className="form-row"><input required placeholder="Gênero" data-testid="suggestion-genre-input" value={form.genre} onChange={e => setForm({...form,genre:e.target.value})}/><input placeholder="Seu nome" data-testid="suggestion-author-input" value={form.submitted_by} onChange={e => setForm({...form,submitted_by:e.target.value})}/></div><textarea required placeholder="Por que o Neth deveria jogar?" data-testid="suggestion-description-input" value={form.description} onChange={e => setForm({...form,description:e.target.value})}/><button className="btn primary" data-testid="submit-suggestion-button"><Check size={16}/> Enviar para a tropa</button></form></Modal>}</>; }
-function Clips({ community }) { const [form, setForm] = useState({ title: "", url: "", submitted_by: "" }); const add = async e => { e.preventDefault(); await client.post("/clips", form); setForm({title:"",url:"",submitted_by:""}); community.refresh(); }; return <section className="page-section"><div className="section-head"><div><div className="eyebrow pink-text">02 / MOMENTOS IMORTAIS</div><h2>Clip hub</h2><p className="subhead">Os melhores momentos da live, direto da tropa.</p></div></div><div className="clip-layout"><div className="clip-feed">{community.clips.map((clip, i) => <article className="clip-card" key={clip.id} data-testid={`clip-card-${clip.id}`}><div className={`clip-thumb thumb-${i % 2}`}><Clapperboard size={30}/><span>CLIP {String(i+1).padStart(2,"0")}</span></div><div className="clip-content"><div className="card-top"><span className="tag pink">EM DESTAQUE</span><span className="mono">@nethzzzz</span></div><h3>{clip.title}</h3><p>por <b>{clip.submitted_by}</b></p><div className="clip-actions"><a href={clip.url} target="_blank" rel="noreferrer" className="text-link" data-testid={`watch-clip-${clip.id}`}>Assistir agora <ChevronRight size={15}/></a><button className="icon-btn" data-testid={`like-clip-${clip.id}`} onClick={async()=>{await client.post(`/clips/${clip.id}/like`); community.refresh();}}><Heart size={16}/> {clip.likes}</button></div></div></article>)}</div><form className="submit-clip" onSubmit={add}><div className="eyebrow pink-text">COMPARTILHAR</div><h3>Achou um momento lendário?</h3><p>Cole o link do YouTube, Twitch ou Kick e deixe a tropa votar.</p><input required placeholder="Título do clipe" data-testid="clip-title-input" value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/><input required type="url" placeholder="https://..." data-testid="clip-url-input" value={form.url} onChange={e=>setForm({...form,url:e.target.value})}/><input placeholder="Seu nome" data-testid="clip-author-input" value={form.submitted_by} onChange={e=>setForm({...form,submitted_by:e.target.value})}/><button className="btn primary" data-testid="submit-clip-button"><Plus size={16}/> Enviar clipe</button></form></div></section>; }
-function Comments({ target, onClose }) { const [comments,setComments]=useState([]); const [content,setContent]=useState(""); useEffect(()=>{client.get(`/comments/${target.id}`).then(r=>setComments(r.data))},[target.id]); const add=async e=>{e.preventDefault();await client.post("/comments",{target_id:target.id,target_type:"game",author:"Membro da tropa",content});setContent("");const r=await client.get(`/comments/${target.id}`);setComments(r.data)}; return <Modal title={`Comentários • ${target.title}`} onClose={onClose}><div className="comments">{comments.map(c=><div className="comment" key={c.id}><b>{c.author}</b><p>{c.content}</p></div>)}{!comments.length&&<p className="muted">Seja o primeiro a comentar.</p>}<form onSubmit={add} className="comment-form"><input required placeholder="Escreva para a tropa..." data-testid="comment-input" value={content} onChange={e=>setContent(e.target.value)}/><button className="icon-btn" data-testid="submit-comment-button"><MessageCircle size={17}/></button></form></div></Modal>; }
-function Schedule({ community }) { return <section className="page-section"><div className="section-head"><div><div className="eyebrow yellow-text">03 / PRÓXIMAS TRANSMISSÕES</div><h2>Agenda da tropa</h2><p className="subhead">Não perde a próxima call.</p></div><div className="live-badge"><i/> PRÓXIMA LIVE <b>QUARTA, 20:00</b></div></div><div className="schedule-list">{community.schedule.map((item,i)=><div className={`schedule-row ${item.is_special?"special":""}`} key={item.id} data-testid={`schedule-item-${item.id}`}><span className="day">{item.day}</span><b className="time">{item.time}</b><div><h3>{item.game}</h3><p>{item.description}</p></div>{item.is_special&&<span className="tag yellow">ESPECIAL</span>}</div>)}</div></section>; }
-function Polls({ community }) { const [polls,setPolls]=useState(community.polls); useEffect(()=>setPolls(community.polls),[community.polls]); const vote=async(id,i)=>{await client.post(`/polls/${id}/vote?option_index=${i}`); const next=await client.get("/polls");setPolls(next.data)}; return <section className="page-section"><div className="section-head"><div><div className="eyebrow cyan-text">04 / VOZ DA COMUNIDADE</div><h2>Enquetes ativas</h2><p className="subhead">O voto é seu. O sofrimento é do Neth.</p></div></div><div className="poll-grid">{polls.map(p=><article className="poll" key={p.id} data-testid={`poll-card-${p.id}`}><div className="poll-icon"><Trophy/></div><h3>{p.question}</h3>{p.options.map((o,i)=><button key={o.text} className="poll-option" onClick={()=>vote(p.id,i)} data-testid={`poll-option-${p.id}-${i}`}><span>{o.text}</span><b>{o.votes}</b></button>)}</article>)}</div></section>; }
-function Modal({ title, onClose, children }) { return <div className="modal-backdrop"><div className="modal"><button className="close" onClick={onClose} data-testid="close-modal"><X/></button><div className="eyebrow cyan-text">NETH//HQ</div><h2>{title}</h2>{children}</div></div>; }
-function Admin() { const [logged,setLogged]=useState(false); const [form,setForm]=useState({email:"",password:""}); const [reports,setReports]=useState([]); const login=async e=>{e.preventDefault();try{const r=await client.post("/auth/login",form);localStorage.setItem("neth_token",r.data.token);setLogged(true);setReports((await client.get("/reports")).data)}catch{alert("Email ou senha incorretos")}}; if(!logged)return <section className="login-page"><div className="login-panel"><Shield size={30}/><div className="eyebrow pink-text">ÁREA RESTRITA</div><h2>Painel do streamer</h2><p>Entre para cuidar da comunidade e manter a arena saudável.</p><form onSubmit={login} className="form"><input type="email" required placeholder="Email" data-testid="admin-email-input" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/><input type="password" required placeholder="Senha" data-testid="admin-password-input" value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/><button className="btn primary" data-testid="admin-login-button"><LogIn size={16}/> Entrar</button></form></div></section>; return <section className="page-section"><div className="section-head"><div><div className="eyebrow pink-text">05 / CENTRAL DE CONTROLE</div><h2>Moderação</h2><p className="subhead">Tudo sob controle, sem tirar o olho da live.</p></div></div><div className="admin-stats"><div><b>{reports.length}</b><span>denúncias pendentes</span></div><div><b>24</b><span>comentários hoje</span></div><div><b>100%</b><span>comunidade segura</span></div></div><div className="reports">{reports.map(r=><div className="report" key={r.id}><Flag size={18}/><div><b>{r.target_type} denunciado</b><p>{r.reason}</p></div><span className="tag">{r.status}</span></div>)}{!reports.length&&<div className="empty"><Sparkles/> Nenhuma denúncia pendente. A tropa está tranquila.</div>}</div></section>; }
-function App() { const community=useCommunity(); return <BrowserRouter><Layout><Routes><Route path="/" element={<SuggestPage community={community}/>}/><Route path="/suggest" element={<SuggestPage community={community}/>}/><Route path="/clips" element={<Clips community={community}/>}/><Route path="/schedule" element={<Schedule community={community}/>}/><Route path="/polls" element={<Polls community={community}/>}/><Route path="/admin" element={<Admin/>}/></Routes></Layout></BrowserRouter>; }
+
+function Nav() {
+  const loc = useLocation();
+  const { user, logout, setModal } = useAuth();
+  const nav = useNavigate();
+  const items = [["/","Arena",Gamepad2],["/clips","Clipes",Clapperboard],["/schedule","Agenda",CalendarDays],["/polls","Enquetes",Trophy]];
+  return <header className="topbar">
+    <Link to="/" className="brand" data-testid="brand-home">
+      <span className="brand-mark">N</span>
+      <span><b>NETHZZZZ</b><small>COMMUNITY HQ</small></span>
+    </Link>
+    <nav>
+      {items.map(([to, label, Icon]) => <Link key={to} data-testid={`nav-${label.toLowerCase()}`} className={loc.pathname === to ? "active" : ""} to={to}><Icon size={16}/>{label}</Link>)}
+    </nav>
+    <div className="auth-slot">
+      {user ? <>
+        <span className="chip" data-testid="user-chip"><span className="chip-dot"/> {user.nickname}</span>
+        {user.role === "admin" && <button className="admin-link" data-testid="nav-admin" onClick={()=>nav("/admin")}><Shield size={16}/></button>}
+        <button className="admin-link" data-testid="logout-button" onClick={logout}><LogOut size={16}/></button>
+      </> : <>
+        <button className="btn outline sm" data-testid="open-login-modal" onClick={()=>setModal("login")}><LogIn size={14}/> Entrar</button>
+        <button className="btn primary sm" data-testid="open-signup-modal" onClick={()=>setModal("signup")}><UserPlus size={14}/> Criar conta</button>
+      </>}
+    </div>
+  </header>;
+}
+
+function Layout({ children }) {
+  return <><Nav/><main>{children}</main><footer>
+    <span>© 2026 NETHZZZZ HQ</span>
+    <span className="live-dot"><i/> COMUNIDADE ONLINE</span>
+    <span className="socials">
+      <a href="https://twitch.tv/nethzzzzz" target="_blank" rel="noreferrer" data-testid="social-twitch"><Twitch size={16}/></a>
+      <a href="https://youtube.com" target="_blank" rel="noreferrer" data-testid="social-youtube"><Youtube size={16}/></a>
+      <a href="https://instagram.com" target="_blank" rel="noreferrer" data-testid="social-instagram"><Instagram size={16}/></a>
+    </span>
+  </footer></>;
+}
+
+function Hero() {
+  const { setModal, user } = useAuth();
+  return <section className="hero">
+    <div className="hero-copy">
+      <div className="eyebrow"><i/> TRANSMISSÃO EM BREVE <span>•</span> QUARTA 20:00</div>
+      <h1>A Tropa<br/><em>Decide.</em></h1>
+      <p>O quartel-general da comunidade do Neth. Sugira o próximo jogo, compartilhe aquele clipe absurdo e faça a live acontecer.</p>
+      <div className="hero-actions">
+        {!user && <button className="btn primary" onClick={()=>setModal("signup")} data-testid="hero-signup-button"><UserPlus size={17}/> Entrar na tropa</button>}
+        <Link className="text-link" to="/clips" data-testid="hero-clips-link">Explorar clipes <ChevronRight size={16}/></Link>
+      </div>
+    </div>
+    <div className="hero-art">
+      <div className="scanline"/>
+      <span className="avatar-ring">N</span>
+      <div className="status-chip"><Radio size={16}/> CHAT ONLINE <b>1.2K</b></div>
+      <div className="hero-code">NETH//HQ<br/><span>PLAY. VOTE. REPEAT.</span></div>
+    </div>
+  </section>;
+}
+
+function Statbar({ games, clips }) {
+  return <div className="statbar">
+    <div><span className="stat-icon cyan"><Gamepad2/></span><b>{games.length}</b><small>SUGESTÕES ATIVAS</small></div>
+    <div><span className="stat-icon pink"><Clapperboard/></span><b>{clips.length}</b><small>CLIPES DA TROPA</small></div>
+    <div><span className="stat-icon yellow"><Activity/></span><b>12.4K</b><small>MEMBROS ONLINE</small></div>
+    <div className="quote">"O chat escolhe, o Neth sofre." <span>— regra #1</span></div>
+  </div>;
+}
+
+function ReportButton({ target_id, target_type }) {
+  const { requireAuth } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const report = async () => {
+    if (!requireAuth(() => {})) return;
+    const reason = window.prompt("Motivo da denúncia:");
+    if (!reason) return;
+    setBusy(true);
+    try {
+      await client.post("/reports", { target_id, target_type, reason });
+      alert("Denúncia enviada. A tropa agradece!");
+    } catch (ex) {
+      alert(ex?.response?.data?.detail || "Não foi possível enviar a denúncia.");
+    } finally { setBusy(false); }
+  };
+  return <button className="report-btn" disabled={busy} onClick={report} data-testid={`report-${target_type}-${target_id}`} title="Denunciar"><Flag size={13}/></button>;
+}
+
+function SuggestionCard({ game, onVote, onComment }) {
+  return <article className="suggestion" data-testid={`suggestion-card-${game.id}`}>
+    <div className="vote">
+      <button onClick={() => onVote(game.id)} data-testid={`vote-game-${game.id}`}><ArrowUp size={18}/></button>
+      <b>{game.votes}</b><small>VOTOS</small>
+    </div>
+    <div className="suggestion-body">
+      <div className="card-top">
+        <span className={`tag ${game.status === "Jogado" ? "green" : ""}`}>{game.status}</span>
+        <span className="mono">{game.platform}</span>
+      </div>
+      <h3>{game.title}</h3>
+      <p>{game.description}</p>
+      <div className="meta">
+        <span>por <b>{game.submitted_by}</b></span>
+        <div className="meta-actions">
+          <button className="comment-link" onClick={() => onComment(game)} data-testid={`comment-game-${game.id}`}><MessageCircle size={14}/> comentar</button>
+          <ReportButton target_id={game.id} target_type="game"/>
+        </div>
+      </div>
+    </div>
+  </article>;
+}
+
+function SuggestPage({ community }) {
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [form, setForm] = useState({ title: "", genre: "", description: "" });
+  const [err, setErr] = useState("");
+  const { requireAuth } = useAuth();
+  const openModal = () => { if (requireAuth(() => setOpen(true))) setOpen(true); };
+  const submit = async (e) => {
+    e.preventDefault(); setErr("");
+    try {
+      await client.post("/games", form);
+      setForm({ title: "", genre: "", description: "" });
+      setOpen(false);
+      community.refresh();
+    } catch (ex) { setErr(ex?.response?.data?.detail || "Falha ao enviar."); }
+  };
+  const vote = async (id) => {
+    if (!requireAuth(() => {})) return;
+    try { await client.post(`/games/${id}/vote`); community.refresh(); }
+    catch (ex) { alert(ex?.response?.data?.detail || "Não foi possível votar."); }
+  };
+  return <>
+    <Hero/>
+    <Statbar games={community.games} clips={community.clips}/>
+    <section className="section" id="suggestions">
+      <div className="section-head">
+        <div>
+          <div className="eyebrow cyan-text">01 / DECISÃO DO CHAT</div>
+          <h2>Sugestões de jogos</h2>
+        </div>
+        <button className="btn outline" onClick={openModal} data-testid="open-suggestion-modal"><Plus size={16}/> Nova sugestão</button>
+      </div>
+      <div className="board-grid">
+        {community.games.map((g) => <SuggestionCard key={g.id} game={g} onVote={vote} onComment={setSelected}/>)}
+      </div>
+    </section>
+    {selected && <Comments target={selected} target_type="game" onClose={() => setSelected(null)}/>}
+    {open && <Modal title="Coloque um jogo na fila" onClose={() => setOpen(false)}>
+      <form onSubmit={submit} className="form">
+        <input required placeholder="Nome do jogo" data-testid="suggestion-title-input" value={form.title} onChange={e => setForm({...form, title: e.target.value})}/>
+        <div className="form-row">
+          <input required placeholder="Gênero" data-testid="suggestion-genre-input" value={form.genre} onChange={e => setForm({...form, genre: e.target.value})}/>
+          <input placeholder="Plataforma (PC, PS5...)" data-testid="suggestion-platform-input" onChange={e => setForm({...form, platform: e.target.value})}/>
+        </div>
+        <textarea required placeholder="Por que o Neth deveria jogar?" data-testid="suggestion-description-input" value={form.description} onChange={e => setForm({...form, description: e.target.value})}/>
+        {err && <div className="err">{err}</div>}
+        <button className="btn primary" data-testid="submit-suggestion-button"><Check size={16}/> Enviar para a tropa</button>
+      </form>
+    </Modal>}
+  </>;
+}
+
+function Clips({ community }) {
+  const [form, setForm] = useState({ title: "", url: "" });
+  const [err, setErr] = useState("");
+  const [selected, setSelected] = useState(null);
+  const { requireAuth } = useAuth();
+  const add = async e => {
+    e.preventDefault(); setErr("");
+    if (!requireAuth(() => {})) return;
+    try {
+      await client.post("/clips", form);
+      setForm({ title: "", url: "" });
+      community.refresh();
+    } catch (ex) { setErr(ex?.response?.data?.detail || "Falha ao enviar."); }
+  };
+  const like = async (id) => {
+    if (!requireAuth(() => {})) return;
+    try { await client.post(`/clips/${id}/like`); community.refresh(); }
+    catch (ex) { alert(ex?.response?.data?.detail || "Não foi possível curtir."); }
+  };
+  return <section className="page-section">
+    <div className="section-head">
+      <div>
+        <div className="eyebrow pink-text">02 / MOMENTOS IMORTAIS</div>
+        <h2>Clip hub</h2>
+        <p className="subhead">Os melhores momentos da live, direto da tropa.</p>
+      </div>
+    </div>
+    <div className="clip-layout">
+      <div className="clip-feed">
+        {community.clips.map((clip, i) => <article className="clip-card" key={clip.id} data-testid={`clip-card-${clip.id}`}>
+          <div className={`clip-thumb thumb-${i % 2}`}><Clapperboard size={30}/><span>CLIP {String(i+1).padStart(2,"0")}</span></div>
+          <div className="clip-content">
+            <div className="card-top">
+              <span className="tag pink">EM DESTAQUE</span>
+              <span className="mono">@nethzzzz</span>
+            </div>
+            <h3>{clip.title}</h3>
+            <p>por <b>{clip.submitted_by}</b></p>
+            <div className="clip-actions">
+              <a href={clip.url} target="_blank" rel="noreferrer" className="text-link" data-testid={`watch-clip-${clip.id}`}>Assistir agora <ChevronRight size={15}/></a>
+              <div className="meta-actions">
+                <button className="icon-btn" onClick={()=>setSelected(clip)} data-testid={`comment-clip-${clip.id}`}><MessageCircle size={16}/></button>
+                <button className="icon-btn" data-testid={`like-clip-${clip.id}`} onClick={()=>like(clip.id)}><Heart size={16}/> {clip.likes}</button>
+                <ReportButton target_id={clip.id} target_type="clip"/>
+              </div>
+            </div>
+          </div>
+        </article>)}
+      </div>
+      <form className="submit-clip" onSubmit={add}>
+        <div className="eyebrow pink-text">COMPARTILHAR</div>
+        <h3>Achou um momento lendário?</h3>
+        <p>Cole o link do YouTube, Twitch ou Kick e deixe a tropa votar.</p>
+        <input required placeholder="Título do clipe" data-testid="clip-title-input" value={form.title} onChange={e=>setForm({...form, title: e.target.value})}/>
+        <input required type="url" placeholder="https://..." data-testid="clip-url-input" value={form.url} onChange={e=>setForm({...form, url: e.target.value})}/>
+        {err && <div className="err">{err}</div>}
+        <button className="btn primary" data-testid="submit-clip-button"><Plus size={16}/> Enviar clipe</button>
+      </form>
+    </div>
+    {selected && <Comments target={selected} target_type="clip" onClose={()=>setSelected(null)}/>}
+  </section>;
+}
+
+function Comments({ target, target_type, onClose }) {
+  const [comments, setComments] = useState([]);
+  const [content, setContent] = useState("");
+  const [err, setErr] = useState("");
+  const { user, setModal } = useAuth();
+  const load = useCallback(async () => {
+    const r = await client.get(`/comments/${target.id}`);
+    setComments(r.data);
+  }, [target.id]);
+  useEffect(() => { load(); }, [load]);
+  const add = async (e) => {
+    e.preventDefault(); setErr("");
+    if (!user) { setModal("login"); return; }
+    try {
+      await client.post("/comments", { target_id: target.id, target_type, content });
+      setContent("");
+      load();
+    } catch (ex) { setErr(ex?.response?.data?.detail || "Falha ao comentar."); }
+  };
+  return <Modal title={`Comentários • ${target.title}`} onClose={onClose}>
+    <div className="comments">
+      {comments.map(c => <div className="comment" key={c.id}>
+        <b>{c.author}</b>
+        <p>{c.content}</p>
+      </div>)}
+      {!comments.length && <p className="muted">Seja o primeiro a comentar.</p>}
+      <form onSubmit={add} className="comment-form">
+        <input required maxLength={500} placeholder={user ? "Escreva para a tropa..." : "Faça login para comentar"} data-testid="comment-input" value={content} onChange={e => setContent(e.target.value)}/>
+        <button className="icon-btn" data-testid="submit-comment-button"><MessageCircle size={17}/></button>
+      </form>
+      {err && <div className="err">{err}</div>}
+    </div>
+  </Modal>;
+}
+
+function Schedule({ community }) {
+  return <section className="page-section">
+    <div className="section-head">
+      <div>
+        <div className="eyebrow yellow-text">03 / PRÓXIMAS TRANSMISSÕES</div>
+        <h2>Agenda da tropa</h2>
+        <p className="subhead">Não perde a próxima call.</p>
+      </div>
+      <div className="live-badge"><i/> PRÓXIMA LIVE <b>QUARTA, 20:00</b></div>
+    </div>
+    <div className="schedule-list">
+      {community.schedule.map((item) => <div className={`schedule-row ${item.is_special ? "special" : ""}`} key={item.id} data-testid={`schedule-item-${item.id}`}>
+        <span className="day">{item.day}</span>
+        <b className="time">{item.time}</b>
+        <div>
+          <h3>{item.game}</h3>
+          <p>{item.description}</p>
+        </div>
+        {item.is_special && <span className="tag yellow">ESPECIAL</span>}
+      </div>)}
+    </div>
+  </section>;
+}
+
+function Polls({ community }) {
+  const [polls, setPolls] = useState(community.polls);
+  const { requireAuth } = useAuth();
+  useEffect(() => setPolls(community.polls), [community.polls]);
+  const vote = async (id, i) => {
+    if (!requireAuth(() => {})) return;
+    try {
+      await client.post(`/polls/${id}/vote?option_index=${i}`);
+      const next = await client.get("/polls");
+      setPolls(next.data);
+    } catch (ex) { alert(ex?.response?.data?.detail || "Não foi possível votar."); }
+  };
+  return <section className="page-section">
+    <div className="section-head">
+      <div>
+        <div className="eyebrow cyan-text">04 / VOZ DA COMUNIDADE</div>
+        <h2>Enquetes ativas</h2>
+        <p className="subhead">O voto é seu. O sofrimento é do Neth.</p>
+      </div>
+    </div>
+    <div className="poll-grid">
+      {polls.map(p => <article className="poll" key={p.id} data-testid={`poll-card-${p.id}`}>
+        <div className="poll-icon"><Trophy/></div>
+        <h3>{p.question}</h3>
+        {p.options.map((o, i) => <button key={o.text} className="poll-option" onClick={() => vote(p.id, i)} data-testid={`poll-option-${p.id}-${i}`}>
+          <span>{o.text}</span><b>{o.votes}</b>
+        </button>)}
+      </article>)}
+    </div>
+  </section>;
+}
+
+function Modal({ title, onClose, children }) {
+  return <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal" onClick={e => e.stopPropagation()}>
+      <button className="close" onClick={onClose} data-testid="close-modal"><X/></button>
+      <div className="eyebrow cyan-text">NETH//HQ</div>
+      <h2>{title}</h2>
+      {children}
+    </div>
+  </div>;
+}
+
+function Admin() {
+  const { user, setModal } = useAuth();
+  const nav = useNavigate();
+  const [tab, setTab] = useState("users");
+  const [users, setUsers] = useState([]);
+  const [reports, setReports] = useState([]);
+  const load = async () => {
+    try {
+      const [u, r] = await Promise.all([client.get("/admin/users"), client.get("/reports")]);
+      setUsers(u.data);
+      setReports(r.data);
+    } catch (ex) {
+      if (ex?.response?.status === 401) setModal("login");
+    }
+  };
+  useEffect(() => {
+    if (!user) { setModal("login"); return; }
+    if (user.role !== "admin") { nav("/"); return; }
+    load();
+  }, [user]);
+  const download = (fmt) => {
+    const token = localStorage.getItem("neth_token");
+    const url = `${API}/admin/users/export?fmt=${fmt}`;
+    fetch(url, { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(r => r.blob())
+      .then(blob => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `nethzzzz-users.${fmt}`;
+        a.click();
+      });
+  };
+  const resolveReport = async (id, status) => {
+    await client.patch(`/reports/${id}?status=${encodeURIComponent(status)}`);
+    load();
+  };
+  if (!user || user.role !== "admin") return <section className="page-section"><div className="empty" data-testid="admin-locked"><Shield/> Faça login como streamer para acessar.</div></section>;
+  return <section className="page-section">
+    <div className="section-head">
+      <div>
+        <div className="eyebrow pink-text">05 / CENTRAL DE CONTROLE</div>
+        <h2>Moderação</h2>
+        <p className="subhead">Tudo sob controle, sem tirar o olho da live.</p>
+      </div>
+    </div>
+    <div className="admin-stats">
+      <div><b data-testid="stat-users">{users.length}</b><span>membros da tropa</span></div>
+      <div><b data-testid="stat-reports">{reports.filter(r=>r.status==="Pendente").length}</b><span>denúncias pendentes</span></div>
+      <div><b>100%</b><span>uptime da arena</span></div>
+    </div>
+    <div className="admin-tabs">
+      <button className={tab==="users"?"active":""} onClick={()=>setTab("users")} data-testid="tab-users"><Users size={15}/> Contas</button>
+      <button className={tab==="reports"?"active":""} onClick={()=>setTab("reports")} data-testid="tab-reports"><Flag size={15}/> Denúncias</button>
+    </div>
+    {tab === "users" ? <>
+      <div className="export-bar">
+        <button className="btn outline sm" onClick={()=>download("csv")} data-testid="export-csv-button"><Download size={14}/> Exportar CSV</button>
+        <button className="btn outline sm" onClick={()=>download("txt")} data-testid="export-txt-button"><Download size={14}/> Exportar TXT</button>
+      </div>
+      <div className="table-wrap">
+        <table className="table">
+          <thead><tr><th>Nickname</th><th>Email</th><th>Criação</th><th>IP criação</th><th>Último IP</th><th>Último login</th></tr></thead>
+          <tbody>
+            {users.map(u => <tr key={u.id} data-testid={`user-row-${u.id}`}>
+              <td>{u.nickname}</td>
+              <td>{u.email}</td>
+              <td className="mono">{new Date(u.created_at).toLocaleString("pt-BR")}</td>
+              <td className="mono">{u.creation_ip}</td>
+              <td className="mono">{u.last_ip}</td>
+              <td className="mono">{u.last_login ? new Date(u.last_login).toLocaleString("pt-BR") : "—"}</td>
+            </tr>)}
+            {!users.length && <tr><td colSpan="6" className="empty-row">Nenhum membro cadastrado ainda.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </> : <div className="reports">
+      {reports.map(r => <div className="report" key={r.id} data-testid={`report-row-${r.id}`}>
+        <Flag size={18}/>
+        <div>
+          <b>{r.target_type} denunciado</b>
+          <p>{r.reason}</p>
+          <small className="mono">por {r.reported_by} • {new Date(r.created_at).toLocaleString("pt-BR")}</small>
+        </div>
+        <span className="tag">{r.status}</span>
+        {r.status === "Pendente" && <>
+          <button className="icon-btn" onClick={()=>resolveReport(r.id,"Resolvido")} data-testid={`resolve-report-${r.id}`}><Check size={14}/></button>
+          <button className="icon-btn" onClick={()=>resolveReport(r.id,"Descartado")} data-testid={`dismiss-report-${r.id}`}><Trash2 size={14}/></button>
+        </>}
+      </div>)}
+      {!reports.length && <div className="empty"><Sparkles/> Nenhuma denúncia. A tropa está tranquila.</div>}
+    </div>}
+  </section>;
+}
+
+function App() {
+  const community = useCommunity();
+  return <BrowserRouter>
+    <AuthProvider>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<SuggestPage community={community}/>}/>
+          <Route path="/suggest" element={<SuggestPage community={community}/>}/>
+          <Route path="/clips" element={<Clips community={community}/>}/>
+          <Route path="/schedule" element={<Schedule community={community}/>}/>
+          <Route path="/polls" element={<Polls community={community}/>}/>
+          <Route path="/admin" element={<Admin/>}/>
+        </Routes>
+      </Layout>
+    </AuthProvider>
+  </BrowserRouter>;
+}
 export default App;

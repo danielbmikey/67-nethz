@@ -1,39 +1,42 @@
 # PRD — @nethzzzz Community HQ
 
 ## Problema original
-Crie um aplicativo web: Faça um site tematico do streamer @nethzzzz onde as pessoas podem colocar sugestoes de jogos , colocar clipes e comentarios em cada uma dessas coisas. Faça um site dificil de derrubar e coloque varias outras ideias uteis para um streamer
+Faça um site temático do streamer @nethzzzz onde as pessoas podem colocar sugestões de jogos, clipes e comentários. Difícil de derrubar, com várias ideias úteis para um streamer.
 
-## Arquitetura e decisões
-- Frontend React com React Router, Axios, Framer-ready CSS e ícones Lucide.
-- Backend FastAPI com MongoDB Motor; respostas filtram `_id` para JSON seguro.
-- Autenticação administrativa JWT com cookie httpOnly e Bearer fallback.
-- API usa somente as URLs configuradas nos arquivos `.env` protegidos.
+## Arquitetura
+- FastAPI + Motor (MongoDB) + JWT (cookie httpOnly + Bearer fallback)
+- React (React Router + Axios) com AuthContext global
+- Rate-limiting natural via idempotência (coleção `votes` com chave composta)
 
 ## Personas
-- Membro da tropa: sugere jogos, vota, comenta, envia clipes e participa de enquetes.
-- Streamer/moderador: acompanha a agenda, controla sugestões e revisa denúncias.
+- Membro da tropa (viewer): cadastra-se, sugere jogos, vota, comenta, envia clipes, denuncia
+- Streamer (admin): modera, resolve denúncias, vê contas e exporta CSV/TXT
 
 ## Requisitos principais
-- Arena de sugestões com votos, comentários, status e marcação de jogado.
-- Clip hub para links e interação de likes.
-- Agenda de lives, enquetes, links sociais e moderação protegida.
-- Interface gamer neon, responsiva e acessível por test IDs.
+- Cadastro/login com email + senha + nickname (nickname único, 3-24 chars)
+- IP tracking (creation_ip, last_ip, last_login) atualizado a cada login
+- Sugestões, clipes, comentários, enquetes com voto único por usuário
+- Botão de denúncia em sugestões e clipes
+- Painel admin: contas (email, nickname, data, IPs), exportação CSV/TXT sem senha, denúncias com resolver/descartar
+- UI dark neon com fontes Space Grotesk + DM Mono
 
-## Implementado — 21/02/2026
-- Home Arena com hero, estatísticas, seed data e navegação entre áreas.
-- CRUD público de sugestões, clipes, comentários e votos.
-- Agenda e enquetes funcionais.
-- Login admin, sessão JWT, proteção da lista de denúncias e painel de moderação.
-- Layout mobile sem overflow e menu primário navegável por ícones.
-- Correção de serialização MongoDB em criação de clipes/comentários.
+## Implementado — 22/02/2026
+- Autenticação viewer + admin com JWT + rastreamento de IP
+- Cadastro e login com nickname único e validação de senha (mínimo 6)
+- CRUD protegido para sugestões/clipes/comentários/reports
+- Idempotência de voto/like/poll por usuário (coleção `votes`)
+- Painel admin: lista de usuários, exportação CSV/TXT sem `password_hash`, resolução de denúncias
+- Botão de denúncia em sugestões e clipes
+- Testado 27/27 (100%) no backend testing agent
 
 ## Backlog priorizado
-- P0: adicionar upload persistente de vídeo em storage de objetos.
-- P1: permitir ao admin alterar status das sugestões e resolver denúncias pela UI.
-- P1: adicionar perfis/apelidos persistentes da comunidade.
-- P2: ranking semanal, notificações de live e integração de presença Twitch/Kick.
+- P1: Verificação de email via Resend (aguardando API key do usuário)
+- P1: Upload persistente de vídeo em storage de objetos
+- P1: Página de perfil pública do viewer (badges, jogos sugeridos)
+- P2: Ranking semanal + notificações de live
+- P2: Enum de status para reports (Resolvido/Descartado/Em análise)
+- P2: Integração de presença Twitch/Kick
 
-## Próximas tarefas
-1. Conectar upload de clipes a storage de objetos.
-2. Criar ações de moderação para status, exclusão e denúncias.
-3. Adicionar ranking de membros ativos e badges da tropa.
+## Credenciais de teste
+- Admin: `admin@nethzzzz.gg` / `NethHQ#2026!`
+- Viewer teste: `tropa1@nethzzzz.gg` / `pass1234` (criado via signup)
