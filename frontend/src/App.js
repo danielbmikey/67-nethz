@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import axios from "axios";
-import { BrowserRouter, Link, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Link, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Activity, ArrowUp, CalendarDays, Check, ChevronRight, Clapperboard, Download, Eye, EyeOff, Flag, Gamepad2, Heart, Instagram, LogIn, LogOut, Mail, MessageCircle, Plus, Radio, Shield, ShieldCheck, Sparkles, Trash2, Trophy, Twitch, UserPlus, Users, X, Youtube } from "lucide-react";
 import "@/App.css";
 
@@ -195,12 +195,12 @@ function VerifyBanner() {
 }
 
 function useCommunity() {
-  const [data, setData] = useState({ games: [], clips: [], polls: [], schedule: [] });
+  const [data, setData] = useState({ games: [], clips: [], polls: [], schedule: [], stats: { members: 0 }, ranking: [] });
   const [loading, setLoading] = useState(true);
   const refresh = async () => {
     try {
-      const [games, clips, polls, schedule] = await Promise.all(["games","clips","polls","schedule"].map(x => client.get(`/${x}`)));
-      setData({ games: games.data, clips: clips.data, polls: polls.data, schedule: schedule.data });
+      const [games, clips, polls, schedule, stats, ranking] = await Promise.all(["games","clips","polls","schedule","stats","ranking"].map(x => client.get(`/${x}`)));
+      setData({ games: games.data, clips: clips.data, polls: polls.data, schedule: schedule.data, stats: stats.data, ranking: ranking.data });
     } finally { setLoading(false); }
   };
   useEffect(() => { refresh(); }, []);
@@ -245,7 +245,7 @@ function Layout({ children }) {
   </footer></>;
 }
 
-function Hero() {
+function Hero({ members }) {
   const { setModal, user } = useAuth();
   return <section className="hero">
     <div className="hero-copy">
@@ -260,19 +260,41 @@ function Hero() {
     <div className="hero-art">
       <div className="scanline"/>
       <span className="avatar-ring"><img src="/twitch_avatar.png" alt="nethzzzzz" data-testid="hero-avatar"/></span>
-      <div className="status-chip"><Radio size={16}/> CHAT ONLINE <b>1.2K</b></div>
+      <div className="status-chip"><Radio size={16}/> TROPA <b data-testid="hero-members-count">{members}</b></div>
       <div className="hero-code">NETH//HQ<br/><span>PLAY. VOTE. REPEAT.</span></div>
     </div>
   </section>;
 }
 
-function Statbar({ games, clips }) {
+function Statbar({ games, clips, members }) {
   return <div className="statbar">
-    <div><span className="stat-icon cyan"><Gamepad2/></span><b>{games.length}</b><small>SUGESTÕES ATIVAS</small></div>
-    <div><span className="stat-icon pink"><Clapperboard/></span><b>{clips.length}</b><small>CLIPES DA TROPA</small></div>
-    <div><span className="stat-icon yellow"><Activity/></span><b>12.4K</b><small>MEMBROS ONLINE</small></div>
+    <div><span className="stat-icon cyan"><Gamepad2/></span><b data-testid="stat-games-count">{games.length}</b><small>SUGESTÕES ATIVAS</small></div>
+    <div><span className="stat-icon pink"><Clapperboard/></span><b data-testid="stat-clips-count">{clips.length}</b><small>CLIPES DA TROPA</small></div>
+    <div><span className="stat-icon yellow"><Users/></span><b data-testid="stat-members-count">{members}</b><small>MEMBROS DA TROPA</small></div>
     <div className="quote">"O chat escolhe, o Neth sofre." <span>— regra #1</span></div>
   </div>;
+}
+
+const BADGE_ICONS = { verified: ShieldCheck, strategist: Gamepad2, curator: Trophy, director: Clapperboard, legend: Sparkles, voice: MessageCircle, elector: Check };
+
+function Ranking({ ranking }) {
+  return <section className="section">
+    <div className="section-head">
+      <div>
+        <div className="eyebrow yellow-text">HALL DA FAMA</div>
+        <h2>Ranking da Tropa</h2>
+        <p className="subhead">Top 10 membros mais ativos. Sugira, vote e comente pra subir.</p>
+      </div>
+    </div>
+    {ranking.length ? <div className="rank-list" data-testid="ranking-list">
+      {ranking.map((r, i) => <Link to={`/perfil/${encodeURIComponent(r.nickname)}`} className={`rank-row ${i < 3 ? "top" : ""}`} key={r.nickname} data-testid={`rank-row-${i+1}`}>
+        <span className="rank-pos">#{String(i+1).padStart(2,"0")}</span>
+        <b className="rank-nick">{r.nickname} {r.is_verified && <ShieldCheck size={13}/>}</b>
+        <span className="rank-break mono">{r.games} jogos • {r.clips} clipes • {r.comments} comentários • {r.votes} votos</span>
+        <b className="rank-score">{r.score}<small>PTS</small></b>
+      </Link>)}
+    </div> : <div className="empty" data-testid="ranking-empty"><Trophy/> Ainda ninguém pontuou. Sugira um jogo e abra o ranking!</div>}
+  </section>;
 }
 
 function ReportButton({ target_id, target_type }) {
@@ -307,7 +329,7 @@ function SuggestionCard({ game, onVote, onComment }) {
       <h3>{game.title}</h3>
       <p>{game.description}</p>
       <div className="meta">
-        <span>por <b>{game.submitted_by}</b></span>
+        <span>por <Link className="nick-link" to={`/perfil/${encodeURIComponent(game.submitted_by)}`} data-testid={`profile-link-${game.id}`}>{game.submitted_by}</Link></span>
         <div className="meta-actions">
           <button className="comment-link" onClick={() => onComment(game)} data-testid={`comment-game-${game.id}`}><MessageCircle size={14}/> comentar</button>
           <ReportButton target_id={game.id} target_type="game"/>
@@ -339,8 +361,8 @@ function SuggestPage({ community }) {
     catch (ex) { alert(ex?.response?.data?.detail || "Não foi possível votar."); }
   };
   return <>
-    <Hero/>
-    <Statbar games={community.games} clips={community.clips}/>
+    <Hero members={community.stats.members}/>
+    <Statbar games={community.games} clips={community.clips} members={community.stats.members}/>
     <section className="section" id="suggestions">
       <div className="section-head">
         <div>
@@ -352,7 +374,9 @@ function SuggestPage({ community }) {
       <div className="board-grid">
         {community.games.map((g) => <SuggestionCard key={g.id} game={g} onVote={vote} onComment={setSelected}/>)}
       </div>
+      {!community.games.length && <div className="empty" data-testid="games-empty"><Gamepad2/> Nenhuma sugestão ainda. Seja o primeiro a colocar um jogo na fila!</div>}
     </section>
+    <Ranking ranking={community.ranking}/>
     {selected && <Comments target={selected} target_type="game" onClose={() => setSelected(null)}/>}
     {open && <Modal title="Coloque um jogo na fila" onClose={() => setOpen(false)}>
       <form onSubmit={submit} className="form">
@@ -406,7 +430,7 @@ function Clips({ community }) {
               <span className="mono">@nethzzzz</span>
             </div>
             <h3>{clip.title}</h3>
-            <p>por <b>{clip.submitted_by}</b></p>
+            <p>por <Link className="nick-link" to={`/perfil/${encodeURIComponent(clip.submitted_by)}`} data-testid={`clip-profile-link-${clip.id}`}>{clip.submitted_by}</Link></p>
             <div className="clip-actions">
               <a href={clip.url} target="_blank" rel="noreferrer" className="text-link" data-testid={`watch-clip-${clip.id}`}>Assistir agora <ChevronRight size={15}/></a>
               <div className="meta-actions">
@@ -417,6 +441,7 @@ function Clips({ community }) {
             </div>
           </div>
         </article>)}
+        {!community.clips.length && <div className="empty" data-testid="clips-empty"><Clapperboard/> Nenhum clipe ainda. Manda o primeiro momento lendário!</div>}
       </div>
       <form className="submit-clip" onSubmit={add}>
         <div className="eyebrow pink-text">COMPARTILHAR</div>
@@ -523,6 +548,56 @@ function Polls({ community }) {
   </section>;
 }
 
+function Profile() {
+  const { nickname } = useParams();
+  const [p, setP] = useState(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    setP(null); setErr("");
+    client.get(`/users/${encodeURIComponent(nickname)}/profile`).then(r => setP(r.data)).catch(() => setErr("Membro não encontrado."));
+  }, [nickname]);
+  if (err) return <section className="page-section"><div className="empty" data-testid="profile-not-found"><Users/> {err}</div></section>;
+  if (!p) return <section className="page-section"><div className="empty">Carregando perfil...</div></section>;
+  return <section className="page-section" data-testid="profile-page">
+    <div className="profile-head">
+      <span className="profile-avatar" data-testid="profile-avatar">{p.nickname[0].toUpperCase()}</span>
+      <div>
+        <h2 data-testid="profile-nickname">{p.nickname} {p.is_verified && <span className="tag green">VERIFICADO</span>}</h2>
+        <p className="muted mono">na tropa desde {new Date(p.created_at).toLocaleDateString("pt-BR")}</p>
+      </div>
+    </div>
+    <div className="admin-stats profile-stats">
+      <div><b data-testid="profile-games-count">{p.stats.games}</b><span>jogos sugeridos</span></div>
+      <div><b data-testid="profile-clips-count">{p.stats.clips}</b><span>clipes enviados</span></div>
+      <div><b data-testid="profile-comments-count">{p.stats.comments}</b><span>comentários</span></div>
+      <div><b data-testid="profile-votes-count">{p.stats.votes}</b><span>votos</span></div>
+    </div>
+    <h3 className="profile-sub"><Trophy size={16}/> Conquistas</h3>
+    {p.badges.length ? <div className="badge-grid" data-testid="profile-badges">
+      {p.badges.map(b => { const Icon = BADGE_ICONS[b.id] || Sparkles; return <div className="badge" key={b.id} data-testid={`badge-${b.id}`}>
+        <Icon size={18}/>
+        <div><b>{b.label}</b><p>{b.desc}</p></div>
+      </div>; })}
+    </div> : <p className="muted" data-testid="profile-no-badges">Nenhuma conquista ainda. Participa aí!</p>}
+    <h3 className="profile-sub"><Gamepad2 size={16}/> Jogos sugeridos</h3>
+    {p.games.length ? <div className="profile-list" data-testid="profile-games">
+      {p.games.map(g => <div className="profile-item" key={g.id}>
+        <span className={`tag ${g.status === "Jogado" ? "green" : ""}`}>{g.status}</span>
+        <b>{g.title}</b>
+        <span className="mono">{g.votes} votos</span>
+      </div>)}
+    </div> : <p className="muted">Nenhum jogo sugerido ainda.</p>}
+    <h3 className="profile-sub"><Clapperboard size={16}/> Clipes enviados</h3>
+    {p.clips.length ? <div className="profile-list" data-testid="profile-clips">
+      {p.clips.map(c => <div className="profile-item" key={c.id}>
+        <span className="tag pink">CLIPE</span>
+        <a href={c.url} target="_blank" rel="noreferrer" className="nick-link">{c.title}</a>
+        <span className="mono">{c.likes} curtidas</span>
+      </div>)}
+    </div> : <p className="muted">Nenhum clipe enviado ainda.</p>}
+  </section>;
+}
+
 function Modal({ title, onClose, children }) {
   return <div className="modal-backdrop" onClick={onClose}>
     <div className="modal" onClick={e => e.stopPropagation()}>
@@ -582,7 +657,7 @@ function Admin() {
     <div className="admin-stats">
       <div><b data-testid="stat-users">{users.length}</b><span>membros da tropa</span></div>
       <div><b data-testid="stat-reports">{reports.filter(r=>r.status==="Pendente").length}</b><span>denúncias pendentes</span></div>
-      <div><b>100%</b><span>uptime da arena</span></div>
+      <div><b data-testid="stat-resolved">{reports.filter(r=>r.status!=="Pendente").length}</b><span>denúncias resolvidas</span></div>
     </div>
     <div className="admin-tabs">
       <button className={tab==="users"?"active":""} onClick={()=>setTab("users")} data-testid="tab-users"><Users size={15}/> Contas</button>
@@ -640,6 +715,7 @@ function App() {
           <Route path="/clips" element={<Clips community={community}/>}/>
           <Route path="/schedule" element={<Schedule community={community}/>}/>
           <Route path="/polls" element={<Polls community={community}/>}/>
+          <Route path="/perfil/:nickname" element={<Profile/>}/>
           <Route path="/admin" element={<Admin/>}/>
         </Routes>
       </Layout>

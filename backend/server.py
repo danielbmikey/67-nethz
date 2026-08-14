@@ -42,12 +42,13 @@ async def send_email(to, subject, html):
     if not RESEND_API_KEY:
         logging.warning("RESEND_API_KEY ausente; email nao enviado para %s", to)
         return False
-    try:
-        await asyncio.to_thread(resend.Emails.send, {"from": f"NETHZZZZ HQ <{SENDER_EMAIL}>", "to": [to], "subject": subject, "html": html})
-        return True
-    except Exception as exc:
-        logging.error("Falha ao enviar email para %s: %s", to, exc)
-        return False
+    for sender in [SENDER_EMAIL, "onboarding@resend.dev"]:
+        try:
+            await asyncio.to_thread(resend.Emails.send, {"from": f"NETHZZZZ HQ <{sender}>", "to": [to], "subject": subject, "html": html})
+            return True
+        except Exception as exc:
+            logging.error("Falha ao enviar email (from=%s) para %s: %s", sender, to, exc)
+    return False
 
 def code_email_html(title, message, code):
     return f"""<div style="background:#0b0c10;color:#e8e9ef;padding:36px;font-family:Arial,sans-serif">
@@ -157,7 +158,7 @@ async def lifespan(app):
                 {"id":uid(),"day":"Sexta-feira","time":"21:00 BRT","game":"Terror & Sustos","description":"Noite de cagaço coletivo","is_special":False},
             ])
         if await db.polls.count_documents({}) == 0:
-            await db.polls.insert_one({"id":uid(),"question":"Qual jogo o Neth deve zerar na maratona de 12 horas?","options":[{"text":"Dark Souls 3 sem tomar hit","votes":45},{"text":"Outlast Trials Hardcore","votes":30},{"text":"GTA San Andreas Chaos Mod","votes":82}],"is_active":True,"created_at":now()})
+            await db.polls.insert_one({"id":uid(),"question":"Qual jogo o Neth deve zerar na maratona de 12 horas?","options":[{"text":"Dark Souls 3 sem tomar hit","votes":0},{"text":"Outlast Trials Hardcore","votes":0},{"text":"GTA San Andreas Chaos Mod","votes":0}],"is_active":True,"created_at":now()})
     except Exception as exc:
         logging.error("Seed warning: %s", exc)
     yield
@@ -186,6 +187,57 @@ async def polls(): return await many("polls")
 
 @api.get("/schedule")
 async def schedule(): return await many("schedule")
+
+@api.get("/stats")
+async def stats():
+    return {
+        "members": await db.users.count_documents({}),
+        "games": await db.games.count_documents({}),
+        "clips": await db.clips.count_documents({}),
+    }
+
+async def _counts_by(collection, field):
+    rows = await db[collection].aggregate([{"$group": {"_id": f"${field}", "n": {"$sum": 1}}}]).to_list(10000)
+    return {r["_id"]: r["n"] for r in rows if r["_id"]}
+
+@api.get("/ranking")
+async def ranking():
+    games_c = await _counts_by("games", "submitted_by_id")
+    clips_c = await _counts_by("clips", "submitted_by_id")
+    comments_c = await _counts_by("comments", "author_id")
+    votes_c = await _counts_by("votes", "user_id")
+    users = await db.users.find({}, {"_id": 0, "id": 1, "nickname": 1, "is_verified": 1}).to_list(5000)
+    board = []
+    for u in users:
+        g, c, m, v = games_c.get(u["id"], 0), clips_c.get(u["id"], 0), comments_c.get(u["id"], 0), votes_c.get(u["id"], 0)
+        score = g * 3 + c * 3 + m * 2 + v
+        if score > 0:
+            board.append({"nickname": u["nickname"], "is_verified": u.get("is_verified", False), "score": score, "games": g, "clips": c, "comments": m, "votes": v})
+    board.sort(key=lambda x: x["score"], reverse=True)
+    return board[:10]
+
+@api.get("/users/{nickname}/profile")
+async def user_profile(nickname: str):
+    user = await db.users.find_one({"nickname": nickname}, {"_id": 0, "password_hash": 0, "email": 0, "creation_ip": 0, "last_ip": 0})
+    if not user: raise HTTPException(404, "Membro não encontrado.")
+    games = await db.games.find({"submitted_by_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    clips = await db.clips.find({"submitted_by_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    comments_n = await db.comments.count_documents({"author_id": user["id"]})
+    votes_n = await db.votes.count_documents({"user_id": user["id"]})
+    badges = []
+    if user.get("is_verified"): badges.append({"id": "verified", "label": "Verificado", "desc": "Email confirmado no QG"})
+    if len(games) >= 1: badges.append({"id": "strategist", "label": "Estrategista", "desc": "Sugeriu um jogo pra tropa"})
+    if len(games) >= 5: badges.append({"id": "curator", "label": "Curador da Arena", "desc": "5+ jogos sugeridos"})
+    if len(clips) >= 1: badges.append({"id": "director", "label": "Cinegrafista", "desc": "Enviou um clipe pro hub"})
+    if any(c.get("likes", 0) >= 10 for c in clips): badges.append({"id": "legend", "label": "Clipe Lendário", "desc": "Um clipe com 10+ curtidas"})
+    if comments_n >= 10: badges.append({"id": "voice", "label": "Voz Ativa", "desc": "10+ comentários na arena"})
+    if votes_n >= 10: badges.append({"id": "elector", "label": "Eleitor de Elite", "desc": "10+ votos registrados"})
+    return {
+        "nickname": user["nickname"], "is_verified": user.get("is_verified", False), "created_at": user["created_at"],
+        "games": games, "clips": clips,
+        "stats": {"games": len(games), "clips": len(clips), "comments": comments_n, "votes": votes_n},
+        "badges": badges,
+    }
 
 # ---------- Auth ----------
 @api.post("/auth/signup")

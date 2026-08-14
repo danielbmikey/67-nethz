@@ -38,13 +38,18 @@ Faça um site temático do streamer @nethzzzz onde as pessoas podem colocar suge
 - Resend: key configurada; SENDER_EMAIL=onboarding@resend.dev (modo teste — só entrega para o email do dono da conta). Domínio `nethzcuiudos.dev` do usuário ainda NÃO verificado no painel Resend
 - Testado 12/12 (100%) frontend via testing agent (iteration_3.json)
 
+## Implementado — 14/06/2026 (parte 2)
+- **Dados fakes removidos**: seeds de jogos/clipes fakes apagados do código e do banco; votos fakes da enquete zerados; números fakes (12.4K online, 1.2K chat, 100% uptime) substituídos por contagens reais (`GET /api/stats`)
+- **Ranking da Tropa**: `GET /api/ranking` — Top 10 por pontos (jogo=3, clipe=3, comentário=2, voto=1), exibido na home com link pro perfil
+- **Perfil dos subs**: rota `/perfil/:nickname` + `GET /api/users/{nickname}/profile` — stats, conquistas/badges (Estrategista, Curador, Cinegrafista, Clipe Lendário, Voz Ativa, Eleitor de Elite, Verificado), jogos sugeridos e clipes; nicknames clicáveis nos cards
+- **Resend com fallback**: tenta enviar do domínio `tropa@nethzcuiudos.dev`; se falhar (domínio ainda "pending" no Resend), usa `onboarding@resend.dev` automaticamente
+
 ## Backlog priorizado
-- P1: Verificar domínio `nethzcuiudos.dev` no painel Resend e trocar SENDER_EMAIL (para emails chegarem a qualquer usuário)
+- P1: Domínio `nethzcuiudos.dev` no Resend ainda com status "pending" — usuário precisa concluir verificação DNS (fallback automático já implementado)
 - P1: Upload persistente de vídeo em storage de objetos
-- P1: Página de perfil pública do viewer (badges, jogos sugeridos)
 - P2: Anti-Ban Automático (banir usuário com 3+ denúncias resolvidas)
-- P2: Ranking da Tropa (Top 10 membros mais ativos na home)
 - P2: Integração de presença Twitch/Kick
+- P2: Admin criar/editar enquetes e agenda pela UI
 
 ## Credenciais de teste
 - Admin: `admin@nethzzzz.gg` / `NethHQ#2026!`
