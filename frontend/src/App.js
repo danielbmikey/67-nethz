@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { BrowserRouter, Link, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Activity, ArrowUp, CalendarDays, Check, ChevronRight, Clapperboard, Download, Flag, Gamepad2, Heart, Instagram, LogIn, LogOut, MessageCircle, Plus, Radio, Shield, Sparkles, Trash2, Trophy, Twitch, UserPlus, Users, X, Youtube } from "lucide-react";
+import { Activity, ArrowUp, CalendarDays, Check, ChevronRight, Clapperboard, Download, Eye, EyeOff, Flag, Gamepad2, Heart, Instagram, LogIn, LogOut, Mail, MessageCircle, Plus, Radio, Shield, ShieldCheck, Sparkles, Trash2, Trophy, Twitch, UserPlus, Users, X, Youtube } from "lucide-react";
 import "@/App.css";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -17,15 +17,18 @@ const useAuth = () => useContext(AuthContext);
 
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [ready, setReady] = useState(false);
   const [modal, setModal] = useState(null); // "login" | "signup" | null
   useEffect(() => {
     (async () => {
-      if (!localStorage.getItem("neth_token")) return;
-      try { const r = await client.get("/auth/me"); setUser(r.data); } catch { localStorage.removeItem("neth_token"); }
+      if (localStorage.getItem("neth_token")) {
+        try { const r = await client.get("/auth/me"); setUser(r.data); } catch { localStorage.removeItem("neth_token"); }
+      }
+      setReady(true);
     })();
   }, []);
-  const login = async (email, password) => {
-    const r = await client.post("/auth/login", { email, password });
+  const login = async (email, password, remember = false) => {
+    const r = await client.post("/auth/login", { email, password, remember });
     localStorage.setItem("neth_token", r.data.token);
     setUser(r.data);
     setModal(null);
@@ -43,12 +46,13 @@ function AuthProvider({ children }) {
     localStorage.removeItem("neth_token");
     setUser(null);
   };
+  const updateUser = (patch) => setUser(u => ({ ...u, ...patch }));
   const requireAuth = useCallback((action) => {
     if (user) { action(); return true; }
     setModal("login");
     return false;
   }, [user]);
-  return <AuthContext.Provider value={{ user, login, signup, logout, modal, setModal, requireAuth }}>{children}{modal && <AuthModal/>}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, ready, login, signup, logout, updateUser, modal, setModal, requireAuth }}>{children}{modal && <AuthModal/>}</AuthContext.Provider>;
 }
 
 function AuthModal() {
@@ -83,6 +87,113 @@ function AuthModal() {
   </Modal>;
 }
 
+function Gate({ children }) {
+  const { user, ready } = useAuth();
+  if (!ready) return <div className="boot-screen" data-testid="boot-screen">CARREGANDO NETH//HQ...</div>;
+  if (!user) return <AuthGate/>;
+  return children;
+}
+
+function AuthGate() {
+  const { login, signup } = useAuth();
+  const [view, setView] = useState("login"); // login | signup | forgot | reset
+  const [form, setForm] = useState({ email: "", password: "", nickname: "", code: "", remember: false });
+  const [showPw, setShowPw] = useState(false);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const swap = (v) => { setView(v); setErr(""); setMsg(""); };
+  const copy = {
+    login: "Área exclusiva da tropa. Faça login pra sugerir jogos, votar, mandar clipes e comentar.",
+    signup: "Cria sua conta e entra pra tropa. Leva menos de um minuto.",
+    forgot: "Digite seu email e enviaremos um código de recuperação.",
+    reset: "Digite o código que chegou no seu email e crie uma nova senha.",
+  };
+  const submit = async (e) => {
+    e.preventDefault(); setErr(""); setMsg(""); setBusy(true);
+    try {
+      if (view === "login") await login(form.email, form.password, form.remember);
+      else if (view === "signup") await signup({ email: form.email, password: form.password, nickname: form.nickname });
+      else if (view === "forgot") {
+        const r = await client.post("/auth/forgot-password", { email: form.email });
+        setMsg(r.data.message);
+        setView("reset");
+      } else {
+        const r = await client.post("/auth/reset-password", { email: form.email, code: form.code, new_password: form.password });
+        setMsg(r.data.message);
+        setForm({ ...form, password: "", code: "" });
+        setView("login");
+      }
+    } catch (ex) { setErr(ex?.response?.data?.detail || "Falhou. Tente novamente."); }
+    finally { setBusy(false); }
+  };
+  const pwField = (placeholder) => <div className="pw-row">
+    <input required type={showPw ? "text" : "password"} minLength={6} placeholder={placeholder} data-testid="gate-password-input" value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/>
+    <button type="button" className="pw-toggle" data-testid="toggle-password-visibility" onClick={()=>setShowPw(!showPw)}>{showPw ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
+  </div>;
+  return <div className="auth-gate" data-testid="auth-gate">
+    <div className="scanline"/>
+    <div className="gate-panel">
+      <img className="gate-avatar" src="/twitch_avatar.png" alt="nethzzzzz"/>
+      <h1>NETHZZZZ</h1>
+      <small className="gate-sub">CUIUDOS DELICIOSOS FAN CLUB</small>
+      <p className="muted gate-copy">{copy[view]}</p>
+      {msg && <div className="ok-msg" data-testid="gate-success-message">{msg}</div>}
+      <form className="form" onSubmit={submit}>
+        {view === "signup" && <input required minLength={3} maxLength={24} placeholder="Nickname (3-24 caracteres)" data-testid="gate-nickname-input" value={form.nickname} onChange={e=>setForm({...form,nickname:e.target.value})}/>}
+        {view !== "reset" && <input required type="email" placeholder="Email" data-testid="gate-email-input" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/>}
+        {view === "reset" && <input required maxLength={6} placeholder="Código de 6 dígitos" data-testid="gate-code-input" value={form.code} onChange={e=>setForm({...form,code:e.target.value})}/>}
+        {view !== "forgot" && pwField(view === "reset" ? "Nova senha (mínimo 6)" : "Senha (mínimo 6)")}
+        {view === "login" && <div className="remember-row">
+          <label><input type="checkbox" checked={form.remember} data-testid="remember-me-checkbox" onChange={e=>setForm({...form,remember:e.target.checked})}/> Lembrar de mim (30 dias)</label>
+          <button type="button" className="forgot-link" data-testid="forgot-password-link" onClick={()=>swap("forgot")}>Esqueci minha senha</button>
+        </div>}
+        {err && <div className="err" data-testid="gate-error">{err}</div>}
+        <button className="btn primary" disabled={busy} data-testid="gate-submit-button">
+          {view === "login" && <><LogIn size={16}/> Entrar</>}
+          {view === "signup" && <><UserPlus size={16}/> Criar conta</>}
+          {view === "forgot" && <><Mail size={16}/> Enviar código</>}
+          {view === "reset" && <><ShieldCheck size={16}/> Redefinir senha</>}
+        </button>
+      </form>
+      <div className="auth-swap">
+        {view === "login" && <>Novo por aqui? <button data-testid="gate-switch-signup" onClick={()=>swap("signup")}>Criar conta</button></>}
+        {view === "signup" && <>Já é da tropa? <button data-testid="gate-switch-login" onClick={()=>swap("login")}>Fazer login</button></>}
+        {(view === "forgot" || view === "reset") && <>Lembrou a senha? <button data-testid="gate-back-login" onClick={()=>swap("login")}>Voltar ao login</button></>}
+      </div>
+    </div>
+  </div>;
+}
+
+function VerifyBanner() {
+  const { user, updateUser } = useAuth();
+  const [code, setCode] = useState("");
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  if (!user || user.role === "admin" || user.is_verified) return null;
+  const verify = async (e) => {
+    e.preventDefault(); setErr(""); setMsg("");
+    try { await client.post("/auth/verify", { code }); updateUser({ is_verified: true }); }
+    catch (ex) { setErr(ex?.response?.data?.detail || "Código inválido."); }
+  };
+  const resendCode = async () => {
+    setErr(""); setMsg("");
+    try { await client.post("/auth/resend-verification"); setMsg("Código reenviado! Confira seu email."); }
+    catch (ex) { setErr(ex?.response?.data?.detail || "Não foi possível reenviar."); }
+  };
+  return <div className="verify-banner" data-testid="verify-banner">
+    <Mail size={16}/>
+    <span>Verifique seu email pra confirmar sua conta na tropa.</span>
+    <form onSubmit={verify}>
+      <input maxLength={6} placeholder="Código de 6 dígitos" value={code} onChange={e=>setCode(e.target.value)} data-testid="verify-code-input"/>
+      <button className="btn primary sm" data-testid="verify-submit-button"><ShieldCheck size={14}/> Verificar</button>
+      <button type="button" className="btn outline sm" onClick={resendCode} data-testid="resend-verification-button">Reenviar</button>
+    </form>
+    {msg && <em className="ok" data-testid="verify-success">{msg}</em>}
+    {err && <em className="bad" data-testid="verify-error">{err}</em>}
+  </div>;
+}
+
 function useCommunity() {
   const [data, setData] = useState({ games: [], clips: [], polls: [], schedule: [] });
   const [loading, setLoading] = useState(true);
@@ -103,8 +214,8 @@ function Nav() {
   const items = [["/","Arena",Gamepad2],["/clips","Clipes",Clapperboard],["/schedule","Agenda",CalendarDays],["/polls","Enquetes",Trophy]];
   return <header className="topbar">
     <Link to="/" className="brand" data-testid="brand-home">
-      <span className="brand-mark">N</span>
-      <span><b>NETHZZZZ</b><small>COMMUNITY HQ</small></span>
+      <img className="brand-avatar" src="/twitch_avatar.png" alt="nethzzzzz" data-testid="brand-avatar"/>
+      <span><b>NETHZZZZ</b><small>CUIUDOS DELICIOSOS FAN CLUB</small></span>
     </Link>
     <nav>
       {items.map(([to, label, Icon]) => <Link key={to} data-testid={`nav-${label.toLowerCase()}`} className={loc.pathname === to ? "active" : ""} to={to}><Icon size={16}/>{label}</Link>)}
@@ -123,7 +234,7 @@ function Nav() {
 }
 
 function Layout({ children }) {
-  return <><Nav/><main>{children}</main><footer>
+  return <><Nav/><VerifyBanner/><main>{children}</main><footer>
     <span>© 2026 NETHZZZZ HQ</span>
     <span className="live-dot"><i/> COMUNIDADE ONLINE</span>
     <span className="socials">
@@ -148,7 +259,7 @@ function Hero() {
     </div>
     <div className="hero-art">
       <div className="scanline"/>
-      <span className="avatar-ring">N</span>
+      <span className="avatar-ring"><img src="/twitch_avatar.png" alt="nethzzzzz" data-testid="hero-avatar"/></span>
       <div className="status-chip"><Radio size={16}/> CHAT ONLINE <b>1.2K</b></div>
       <div className="hero-code">NETH//HQ<br/><span>PLAY. VOTE. REPEAT.</span></div>
     </div>
@@ -521,6 +632,7 @@ function App() {
   const community = useCommunity();
   return <BrowserRouter>
     <AuthProvider>
+      <Gate>
       <Layout>
         <Routes>
           <Route path="/" element={<SuggestPage community={community}/>}/>
@@ -531,6 +643,7 @@ function App() {
           <Route path="/admin" element={<Admin/>}/>
         </Routes>
       </Layout>
+      </Gate>
     </AuthProvider>
   </BrowserRouter>;
 }

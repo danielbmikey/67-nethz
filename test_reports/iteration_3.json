@@ -1,0 +1,23 @@
+{
+  "summary": "Frontend UI testing for Nethzzzz Community HQ auth-gate iteration. Verified: (1) auth-gate blocks site — no brand/hero content visible when logged out, (2) signup via gate creates user + shows verify-banner + site content, (3) verify flow: wrong code -> verify-error, correct code (fetched from mongo email_codes) removes banner, (4) resend throttle returns 429 with 'Aguarde 1 minuto para reenviar', (5) toggle-password-visibility flips input type password<->text, (6) wrong login shows gate-error 'Email ou senha incorretos.', (7) login with remember-me works, (8) forgot-password -> code-view (with reset code from mongo) -> reset -> auto-return to login with success message, (9) login with new password works, (10) admin login has NO verify-banner and /admin loads with Contas + Denúncias tabs, (11) regression: create suggestion + vote + poll vote + submit clip + like clip + submit comment all work, (12) visuals: brand-avatar (/twitch_avatar.png), hero-avatar present, 'CUIUDOS DELICIOSOS FAN CLUB' subtitle present in gate + navbar. Logout returns to gate. 12/12 UI scenarios PASSED.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/test_reports/ui/admin.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "App.js is 651 lines and still contains Gate + AuthGate + VerifyBanner + AuthModal + all pages in a single file. Recommend splitting auth components into src/components/auth/*.jsx for maintainability.",
+    "AuthGate stores password in the same form state used for reset (form.password) — after reset, password field is cleared but nickname/email persist; acceptable but could be clearer with separate state per view.",
+    "VerifyBanner: 'resendCode' has no throttle indicator/countdown in UI; server returns 429 as text — good, but adding a disabled state with countdown after click would improve UX.",
+    "AuthModal (old flow at line 58) is still present but Gate blocks the site so AuthModal is never reached from an unauthenticated state. Dead code path — safe to remove now or keep for future 'action requires auth' hooks (requireAuth still calls setModal('login')).",
+    "Token in localStorage AND httpOnly cookie both set — belt-and-suspenders. If cookie is httpOnly + secure, the localStorage copy is only used to prime the Authorization header on refresh; consider unifying to cookie-only to reduce XSS surface.",
+    "AuthGate resets password field to '' after reset-password but keeps email — UX ok; login form auto-fills email, user just types new password."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "Admin: admin@nethzzzz.gg / NethHQ#2026! (verified). Viewer: tropa1@nethzzzz.gg / pass1234 (verified). Ephemeral viewers created during test (tropa_ui_*, resendtest_*).",
+  "seed_data_creation": "Created 2 ephemeral viewers via UI signup, 1 game suggestion (TESTGAME_*), 1 clip (TESTCLIP_*), 1 comment on Elden Ring: Nightreign, plus votes (game & poll) and 1 clip like. Left in DB — safe.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auth gate + verify + forgot/reset flows fully verified end-to-end via UI + mongosh code lookup. All data-testids from the request exist and work. No blocking bugs. Regression (games/clips/polls/comments) also passes. If iterating further, consider adding a UI countdown for resend throttle and splitting App.js.",
+  "rca of the issue": "N/A — no issues found"
+}

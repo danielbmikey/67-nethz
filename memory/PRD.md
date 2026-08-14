@@ -29,12 +29,21 @@ Faça um site temático do streamer @nethzzzz onde as pessoas podem colocar suge
 - Botão de denúncia em sugestões e clipes
 - Testado 27/27 (100%) no backend testing agent
 
+## Implementado — 14/06/2026
+- **Bloqueio total do site**: sem login só aparece a tela de login/cadastro (AuthGate)
+- **Verificação de email via Resend**: código de 6 dígitos no signup + banner de verificação + reenvio (throttle 60s)
+- **Recuperação de senha**: esqueci minha senha → código por email → redefinir (limpa lockout)
+- **Login melhorado**: mostrar/ocultar senha, lembrar de mim (30 dias), lockout 15min após 5 falhas (HTTP 423)
+- **Visual**: avatar real da Twitch (navbar, hero, gate) + subtítulo "CUIUDOS DELICIOSOS FAN CLUB"
+- Resend: key configurada; SENDER_EMAIL=onboarding@resend.dev (modo teste — só entrega para o email do dono da conta). Domínio `nethzcuiudos.dev` do usuário ainda NÃO verificado no painel Resend
+- Testado 12/12 (100%) frontend via testing agent (iteration_3.json)
+
 ## Backlog priorizado
-- P1: Verificação de email via Resend (aguardando API key do usuário)
+- P1: Verificar domínio `nethzcuiudos.dev` no painel Resend e trocar SENDER_EMAIL (para emails chegarem a qualquer usuário)
 - P1: Upload persistente de vídeo em storage de objetos
 - P1: Página de perfil pública do viewer (badges, jogos sugeridos)
-- P2: Ranking semanal + notificações de live
-- P2: Enum de status para reports (Resolvido/Descartado/Em análise)
+- P2: Anti-Ban Automático (banir usuário com 3+ denúncias resolvidas)
+- P2: Ranking da Tropa (Top 10 membros mais ativos na home)
 - P2: Integração de presença Twitch/Kick
 
 ## Credenciais de teste
