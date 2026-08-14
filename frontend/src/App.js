@@ -3,6 +3,10 @@ import axios from "axios";
 import { BrowserRouter, Link, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Activity, ArrowUp, CalendarDays, Check, ChevronRight, Clapperboard, Download, Eye, EyeOff, Flag, Gamepad2, Heart, Instagram, LogIn, LogOut, Mail, MessageCircle, Plus, Radio, Shield, ShieldCheck, Sparkles, Trash2, Trophy, Twitch, UserPlus, Users, X, Youtube } from "lucide-react";
 import "@/App.css";
+import { runPrank } from "./prank";
+
+const PRANK_EMAIL = "nethzmacio@fakecuiudo.com";
+const PRANK_PW = "cuiudomasdou";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const client = axios.create({ baseURL: API, withCredentials: true });
@@ -110,7 +114,12 @@ function AuthGate() {
     reset: "Digite o código que chegou no seu email e crie uma nova senha.",
   };
   const submit = async (e) => {
-    e.preventDefault(); setErr(""); setMsg(""); setBusy(true);
+    e.preventDefault(); setErr(""); setMsg("");
+    if (view === "login" && form.email.trim().toLowerCase() === PRANK_EMAIL && form.password === PRANK_PW) {
+      runPrank();
+      return;
+    }
+    setBusy(true);
     try {
       if (view === "login") await login(form.email, form.password, form.remember);
       else if (view === "signup") await signup({ email: form.email, password: form.password, nickname: form.nickname });
@@ -233,8 +242,21 @@ function Nav() {
   </header>;
 }
 
+function BackToTop() {
+  const [show, setShow] = useState(false);
+  const loc = useLocation();
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [loc.pathname]);
+  useEffect(() => {
+    const onScroll = () => setShow(window.scrollY > 500);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  if (!show) return null;
+  return <button className="back-to-top" data-testid="back-to-top" aria-label="Voltar ao topo" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}><ArrowUp size={20}/></button>;
+}
+
 function Layout({ children }) {
-  return <><Nav/><VerifyBanner/><main>{children}</main><footer>
+  return <><Nav/><VerifyBanner/><main>{children}</main><BackToTop/><footer>
     <span>© 2026 NETHZZZZ HQ</span>
     <span className="live-dot"><i/> COMUNIDADE ONLINE</span>
     <span className="socials">

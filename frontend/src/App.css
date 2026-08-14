@@ -60,3 +60,7 @@
 .profile-item{display:grid;grid-template-columns:auto 1fr auto;gap:15px;align-items:center;padding:13px 15px;border-bottom:1px solid var(--line)}
 .profile-item:hover{background:var(--panel)}
 @media(max-width:800px){.rank-row{grid-template-columns:44px 1fr 70px}.rank-break{display:none}.badge-grid{grid-template-columns:1fr}.profile-stats{grid-template-columns:repeat(2,1fr)}}
+.back-to-top{position:fixed;right:26px;bottom:26px;z-index:8;width:46px;height:46px;display:grid;place-items:center;background:var(--pink);color:#160d17;border:0;box-shadow:4px 4px 0 #74204f;animation:btt-in .3s ease}
+.back-to-top:hover{transform:translateY(-3px);box-shadow:6px 6px 0 #74204f}
+@keyframes btt-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:800px){.back-to-top{right:16px;bottom:16px}}

@@ -1,0 +1,8 @@
+{
+  "image": "/prank/jumpscare.jpg",
+  "audio": "/prank/scream.mp3",
+  "intervalMs": 600,
+  "downloads": [
+    "/prank/dl/cuiudo1.jpg"
+  ]
+}

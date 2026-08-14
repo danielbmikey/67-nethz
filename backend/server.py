@@ -42,13 +42,12 @@ async def send_email(to, subject, html):
     if not RESEND_API_KEY:
         logging.warning("RESEND_API_KEY ausente; email nao enviado para %s", to)
         return False
-    for sender in [SENDER_EMAIL, "onboarding@resend.dev"]:
-        try:
-            await asyncio.to_thread(resend.Emails.send, {"from": f"NETHZZZZ HQ <{sender}>", "to": [to], "subject": subject, "html": html})
-            return True
-        except Exception as exc:
-            logging.error("Falha ao enviar email (from=%s) para %s: %s", sender, to, exc)
-    return False
+    try:
+        await asyncio.to_thread(resend.Emails.send, {"from": f"NETHZZZZ HQ <{SENDER_EMAIL}>", "to": [to], "subject": subject, "html": html})
+        return True
+    except Exception as exc:
+        logging.error("Falha ao enviar email para %s: %s", to, exc)
+        return False
 
 def code_email_html(title, message, code):
     return f"""<div style="background:#0b0c10;color:#e8e9ef;padding:36px;font-family:Arial,sans-serif">
