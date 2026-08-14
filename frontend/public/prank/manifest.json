@@ -7,6 +7,11 @@
     { "at": 2300, "text": "VOCÊ É" },
     { "at": 4300, "text": "MACIO!!!" }
   ],
+  "orbit": [
+    "/prank/orbit/o1.png",
+    "/prank/orbit/o2.png",
+    "/prank/orbit/o3.gif"
+  ],
   "downloads": [
     "/prank/dl/macio1.png",
     "/prank/dl/macio2.png",

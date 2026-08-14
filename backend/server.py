@@ -17,6 +17,8 @@ DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 ADMIN_EMAIL = os.environ["ADMIN_EMAIL"].lower()
 ADMIN_PASSWORD = os.environ["ADMIN_PASSWORD"]
+ADMIN2_USERNAME = os.environ.get("ADMIN2_USERNAME", "").lower().strip()
+ADMIN2_PASSWORD = os.environ.get("ADMIN2_PASSWORD", "")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
 if RESEND_API_KEY: resend.api_key = RESEND_API_KEY
@@ -24,6 +26,17 @@ client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 now = lambda: datetime.now(timezone.utc).isoformat()
 NICK_RE = re.compile(r"^[A-Za-z0-9_.-]{3,24}$")
+DEFAULT_SETTINGS = {
+    "hero_eyebrow": "TRANSMISSÃO EM BREVE • QUARTA 20:00",
+    "hero_title1": "A Tropa",
+    "hero_title2": "Decide.",
+    "hero_paragraph": "O quartel-general da comunidade do Neth. Sugira o próximo jogo, compartilhe aquele clipe absurdo e faça a live acontecer.",
+    "next_live": "QUARTA, 20:00",
+    "twitch_url": "https://twitch.tv/nethzzzzz",
+    "youtube_url": "https://youtube.com",
+    "instagram_url": "https://instagram.com",
+    "footer_status": "COMUNIDADE ONLINE",
+}
 
 def uid(): return str(uuid.uuid4())
 def strip_id(doc): return {k: v for k, v in doc.items() if k != "_id"} if doc else None
@@ -101,15 +114,19 @@ async def decode_token(request: Request):
 
 async def admin_only(request: Request):
     payload = await decode_token(request)
-    if not payload: raise HTTPException(401, "Faça login para moderar.")
-    if payload.get("role") != "admin" or payload.get("sub") != ADMIN_EMAIL:
-        raise HTTPException(403, "Acesso restrito ao streamer.")
-    return payload
+    if not payload: raise HTTPException(401, "Faça login para acessar o painel.")
+    if payload.get("role") != "admin": raise HTTPException(403, "Acesso restrito à administração.")
+    admin = await db.admins.find_one({"id": payload.get("sub")})
+    if not admin: raise HTTPException(403, "Sessão de admin inválida.")
+    return admin
 
 async def current_user(request: Request):
     payload = await decode_token(request)
     if not payload: return None
-    if payload.get("role") == "admin": return {"id": "admin", "nickname": "STREAMER", "email": ADMIN_EMAIL, "role": "admin", "is_verified": True}
+    if payload.get("role") == "admin":
+        admin = await db.admins.find_one({"id": payload.get("sub")}, {"_id": 0, "password_hash": 0})
+        if not admin: return None
+        return {"id": admin["id"], "nickname": admin.get("name", "STREAMER"), "email": admin.get("email") or admin.get("username"), "role": "admin", "is_verified": True}
     user = await db.users.find_one({"id": payload.get("sub")}, {"_id": 0, "password_hash": 0})
     return user
 
@@ -123,6 +140,10 @@ class ClipCreate(BaseModel): title: str; url: str; clip_type: str = "link"
 class CommentCreate(BaseModel): target_id: str; target_type: str; content: str
 class ReportCreate(BaseModel): target_id: str; target_type: str; reason: str
 class PollCreate(BaseModel): question: str; options: List[str]
+class ScheduleCreate(BaseModel): day: str; time: str; game: str; description: str = ""; is_special: bool = False
+class SiteSettings(BaseModel):
+    hero_eyebrow: str; hero_title1: str; hero_title2: str; hero_paragraph: str
+    next_live: str; twitch_url: str; youtube_url: str; instagram_url: str; footer_status: str
 class Login(BaseModel): email: str; password: str; remember: bool = False
 class Signup(BaseModel): email: EmailStr; password: str = Field(min_length=6, max_length=72); nickname: str
 class VerifyCode(BaseModel): code: str
@@ -132,24 +153,26 @@ class ResetPassword(BaseModel): email: EmailStr; code: str; new_password: str = 
 @asynccontextmanager
 async def lifespan(app):
     try:
-        await db.admins.create_index("email", unique=True)
+        await db.admins.create_index("id", unique=True)
         await db.users.create_index("email", unique=True)
         await db.users.create_index("nickname", unique=True)
-        admin = await db.admins.find_one({"email": ADMIN_EMAIL})
-        hashed = hash_pw(ADMIN_PASSWORD)
-        if not admin: await db.admins.insert_one({"email": ADMIN_EMAIL, "password_hash": hashed, "role": "admin"})
-        elif not check_pw(ADMIN_PASSWORD, admin["password_hash"]): await db.admins.update_one({"email": ADMIN_EMAIL}, {"$set": {"password_hash": hashed}})
-        if await db.games.count_documents({}) == 0:
-            await db.games.insert_many([
-                {"id":uid(),"title":"Elden Ring: Nightreign","genre":"Souls-like / Co-op","description":"Neth tem que jogar com o chat gritando em cada boss fight!","platform":"PC","submitted_by":"ViciadoEmSouls","votes":42,"status":"Aprovado","marked_as_played":False,"created_at":now()},
-                {"id":uid(),"title":"Phasmophobia (Modo Pesadelo)","genre":"Terror / Coop","description":"Leva os sustos ao vivo com o áudio estourado!","platform":"PC","submitted_by":"GhostHunter99","votes":35,"status":"Jogado","marked_as_played":True,"created_at":now()},
-                {"id":uid(),"title":"Hollow Knight: Silksong","genre":"Metroidvania","description":"O jogo mais aguardado do século para o Neth sofrer.","platform":"PC","submitted_by":"SilkFanatic","votes":58,"status":"Analisando","marked_as_played":False,"created_at":now()},
-            ])
-        if await db.clips.count_documents({}) == 0:
-            await db.clips.insert_many([
-                {"id":uid(),"title":"CLIPE DO SÉCULO: 1v5 clutch de vandal na bala","url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","clip_type":"link","submitted_by":"ClutchMaster","likes":128,"created_at":now()},
-                {"id":uid(),"title":"Neth rindo da própria desgraça no jumpscare","url":"https://clips.twitch.tv/","clip_type":"link","submitted_by":"RisadaGarantida","likes":94,"created_at":now()},
-            ])
+        await db.login_attempts.create_index("email")
+        await db.email_codes.create_index("expires_at", expireAfterSeconds=0)
+        # Admin 1 (email)
+        a1 = await db.admins.find_one({"email": ADMIN_EMAIL})
+        if not a1:
+            await db.admins.insert_one({"id": uid(), "email": ADMIN_EMAIL, "username": None, "name": "STREAMER", "password_hash": hash_pw(ADMIN_PASSWORD), "role": "admin"})
+        elif not check_pw(ADMIN_PASSWORD, a1["password_hash"]):
+            await db.admins.update_one({"email": ADMIN_EMAIL}, {"$set": {"password_hash": hash_pw(ADMIN_PASSWORD)}})
+        # Admin 2 (username) — super admin do Neth
+        if ADMIN2_USERNAME and ADMIN2_PASSWORD:
+            a2 = await db.admins.find_one({"username": ADMIN2_USERNAME})
+            if not a2:
+                await db.admins.insert_one({"id": uid(), "email": None, "username": ADMIN2_USERNAME, "name": "NETHZ", "password_hash": hash_pw(ADMIN2_PASSWORD), "role": "admin"})
+            elif not check_pw(ADMIN2_PASSWORD, a2["password_hash"]):
+                await db.admins.update_one({"username": ADMIN2_USERNAME}, {"$set": {"password_hash": hash_pw(ADMIN2_PASSWORD)}})
+        if await db.settings.count_documents({}) == 0:
+            await db.settings.insert_one({"_key": "site", **DEFAULT_SETTINGS})
         if await db.schedule.count_documents({}) == 0:
             await db.schedule.insert_many([
                 {"id":uid(),"day":"Segunda-feira","time":"19:00 BRT","game":"Valorant & Ranqueadas","description":"Subindo pro Imortal com o chat","is_special":False},
@@ -186,6 +209,42 @@ async def polls(): return await many("polls")
 
 @api.get("/schedule")
 async def schedule(): return await many("schedule")
+
+@api.get("/settings")
+async def get_settings():
+    doc = await db.settings.find_one({"_key": "site"}, {"_id": 0, "_key": 0})
+    return doc or DEFAULT_SETTINGS
+
+# ---------- Admin: live site editing ----------
+@api.put("/admin/settings")
+async def update_settings(item: SiteSettings, _: dict = Depends(admin_only)):
+    await db.settings.update_one({"_key": "site"}, {"$set": item.model_dump()}, upsert=True)
+    doc = await db.settings.find_one({"_key": "site"}, {"_id": 0, "_key": 0})
+    return doc
+
+@api.post("/admin/schedule")
+async def add_schedule(item: ScheduleCreate, _: dict = Depends(admin_only)):
+    doc = {"id": uid(), **item.model_dump()}
+    await db.schedule.insert_one(doc)
+    return strip_id(doc)
+
+@api.delete("/admin/schedule/{item_id}")
+async def delete_schedule(item_id: str, _: dict = Depends(admin_only)):
+    await db.schedule.delete_one({"id": item_id})
+    return {"success": True}
+
+@api.post("/admin/polls")
+async def add_poll(item: PollCreate, _: dict = Depends(admin_only)):
+    opts = [o.strip() for o in item.options if o.strip()]
+    if len(opts) < 2: raise HTTPException(400, "A enquete precisa de pelo menos 2 opções.")
+    doc = {"id": uid(), "question": item.question.strip(), "options": [{"text": o, "votes": 0} for o in opts], "is_active": True, "created_at": now()}
+    await db.polls.insert_one(doc)
+    return strip_id(doc)
+
+@api.delete("/admin/polls/{poll_id}")
+async def delete_poll(poll_id: str, _: dict = Depends(admin_only)):
+    await db.polls.delete_one({"id": poll_id})
+    return {"success": True}
 
 @api.get("/stats")
 async def stats():
@@ -268,25 +327,25 @@ async def signup(item: Signup, request: Request, response: Response):
 
 @api.post("/auth/login")
 async def login(item: Login, request: Request, response: Response):
-    email = item.email.lower().strip()
-    await check_lock(email)
+    identifier = item.email.lower().strip()
+    await check_lock(identifier)
     ip = client_ip(request)
     days = 30 if item.remember else 1
-    admin = await db.admins.find_one({"email": email})
+    admin = await db.admins.find_one({"$or": [{"email": identifier}, {"username": identifier}]})
     if admin and check_pw(item.password, admin["password_hash"]):
-        await clear_fails(email)
-        token = token_for(ADMIN_EMAIL, "admin", days)
+        await clear_fails(identifier)
+        token = token_for(admin["id"], "admin", days)
         response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=days * 86400)
-        return {"email": ADMIN_EMAIL, "nickname": "STREAMER", "role": "admin", "is_verified": True, "token": token}
-    user = await db.users.find_one({"email": email})
+        return {"id": admin["id"], "email": admin.get("email") or admin.get("username"), "nickname": admin.get("name", "STREAMER"), "role": "admin", "is_verified": True, "token": token}
+    user = await db.users.find_one({"email": identifier})
     if not user or not check_pw(item.password, user["password_hash"]):
-        await register_fail(email)
-        raise HTTPException(401, "Email ou senha incorretos.")
-    await clear_fails(email)
+        await register_fail(identifier)
+        raise HTTPException(401, "Credenciais incorretas.")
+    await clear_fails(identifier)
     await db.users.update_one({"id": user["id"]}, {"$set": {"last_ip": ip, "last_login": now()}})
     token = token_for(user["id"], "viewer", days)
     response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=days * 86400)
-    return {"id": user["id"], "email": email, "nickname": user["nickname"], "role": "viewer", "is_verified": user.get("is_verified", False), "token": token}
+    return {"id": user["id"], "email": user["email"], "nickname": user["nickname"], "role": "viewer", "is_verified": user.get("is_verified", False), "token": token}
 
 @api.get("/auth/me")
 async def me(user=Depends(require_user)): return user
@@ -460,4 +519,14 @@ async def admin_delete_user(user_id: str, _: dict = Depends(admin_only)):
 
 app.include_router(api)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=[os.environ["FRONTEND_URL"]], allow_methods=["*"], allow_headers=["*"])
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    resp = await call_next(request)
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    resp.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return resp
+
 logging.basicConfig(level=logging.INFO)

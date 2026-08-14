@@ -19,6 +19,22 @@ client.interceptors.request.use((config) => {
 const AuthContext = createContext(null);
 const useAuth = () => useContext(AuthContext);
 
+const DEFAULT_SETTINGS = {
+  hero_eyebrow: "TRANSMISSÃO EM BREVE • QUARTA 20:00", hero_title1: "A Tropa", hero_title2: "Decide.",
+  hero_paragraph: "O quartel-general da comunidade do Neth. Sugira o próximo jogo, compartilhe aquele clipe absurdo e faça a live acontecer.",
+  next_live: "QUARTA, 20:00", twitch_url: "https://twitch.tv/nethzzzzz", youtube_url: "https://youtube.com", instagram_url: "https://instagram.com", footer_status: "COMUNIDADE ONLINE",
+};
+const SettingsContext = createContext(null);
+const useSettings = () => useContext(SettingsContext);
+function SettingsProvider({ children }) {
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const refresh = useCallback(async () => {
+    try { const r = await client.get("/settings"); setSettings({ ...DEFAULT_SETTINGS, ...r.data }); } catch {}
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+  return <SettingsContext.Provider value={{ settings, setSettings, refresh }}>{children}</SettingsContext.Provider>;
+}
+
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
@@ -150,7 +166,8 @@ function AuthGate() {
       {msg && <div className="ok-msg" data-testid="gate-success-message">{msg}</div>}
       <form className="form" onSubmit={submit}>
         {view === "signup" && <input required minLength={3} maxLength={24} placeholder="Nickname (3-24 caracteres)" data-testid="gate-nickname-input" value={form.nickname} onChange={e=>setForm({...form,nickname:e.target.value})}/>}
-        {view !== "reset" && <input required type="email" placeholder="Email" data-testid="gate-email-input" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/>}
+        {view === "login" && <input required type="text" autoCapitalize="none" placeholder="Email ou usuário" data-testid="gate-email-input" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/>}
+        {(view === "signup" || view === "forgot") && <input required type="email" placeholder="Email" data-testid="gate-email-input" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/>}
         {view === "reset" && <input required maxLength={6} placeholder="Código de 6 dígitos" data-testid="gate-code-input" value={form.code} onChange={e=>setForm({...form,code:e.target.value})}/>}
         {view !== "forgot" && pwField(view === "reset" ? "Nova senha (mínimo 6)" : "Senha (mínimo 6)")}
         {view === "login" && <div className="remember-row">
@@ -256,24 +273,26 @@ function BackToTop() {
 }
 
 function Layout({ children }) {
+  const { settings } = useSettings();
   return <><Nav/><VerifyBanner/><main>{children}</main><BackToTop/><footer>
     <span>© 2026 NETHZZZZ HQ</span>
-    <span className="live-dot"><i/> COMUNIDADE ONLINE</span>
+    <span className="live-dot"><i/> {settings.footer_status}</span>
     <span className="socials">
-      <a href="https://twitch.tv/nethzzzzz" target="_blank" rel="noreferrer" data-testid="social-twitch"><Twitch size={16}/></a>
-      <a href="https://youtube.com" target="_blank" rel="noreferrer" data-testid="social-youtube"><Youtube size={16}/></a>
-      <a href="https://instagram.com" target="_blank" rel="noreferrer" data-testid="social-instagram"><Instagram size={16}/></a>
+      <a href={settings.twitch_url} target="_blank" rel="noreferrer" data-testid="social-twitch"><Twitch size={16}/></a>
+      <a href={settings.youtube_url} target="_blank" rel="noreferrer" data-testid="social-youtube"><Youtube size={16}/></a>
+      <a href={settings.instagram_url} target="_blank" rel="noreferrer" data-testid="social-instagram"><Instagram size={16}/></a>
     </span>
   </footer></>;
 }
 
 function Hero({ members }) {
   const { setModal, user } = useAuth();
+  const { settings } = useSettings();
   return <section className="hero">
     <div className="hero-copy">
-      <div className="eyebrow"><i/> TRANSMISSÃO EM BREVE <span>•</span> QUARTA 20:00</div>
-      <h1>A Tropa<br/><em>Decide.</em></h1>
-      <p>O quartel-general da comunidade do Neth. Sugira o próximo jogo, compartilhe aquele clipe absurdo e faça a live acontecer.</p>
+      <div className="eyebrow" data-testid="hero-eyebrow"><i/> {settings.hero_eyebrow}</div>
+      <h1>{settings.hero_title1}<br/><em>{settings.hero_title2}</em></h1>
+      <p data-testid="hero-paragraph">{settings.hero_paragraph}</p>
       <div className="hero-actions">
         {!user && <button className="btn primary" onClick={()=>setModal("signup")} data-testid="hero-signup-button"><UserPlus size={17}/> Entrar na tropa</button>}
         <Link className="text-link" to="/clips" data-testid="hero-clips-link">Explorar clipes <ChevronRight size={16}/></Link>
@@ -515,6 +534,7 @@ function Comments({ target, target_type, onClose }) {
 }
 
 function Schedule({ community }) {
+  const { settings } = useSettings();
   return <section className="page-section">
     <div className="section-head">
       <div>
@@ -522,7 +542,7 @@ function Schedule({ community }) {
         <h2>Agenda da tropa</h2>
         <p className="subhead">Não perde a próxima call.</p>
       </div>
-      <div className="live-badge"><i/> PRÓXIMA LIVE <b>QUARTA, 20:00</b></div>
+      <div className="live-badge"><i/> PRÓXIMA LIVE <b>{settings.next_live}</b></div>
     </div>
     <div className="schedule-list">
       {community.schedule.map((item) => <div className={`schedule-row ${item.is_special ? "special" : ""}`} key={item.id} data-testid={`schedule-item-${item.id}`}>
@@ -631,10 +651,96 @@ function Modal({ title, onClose, children }) {
   </div>;
 }
 
-function Admin() {
+function SiteEditor({ community }) {
+  const { settings, setSettings, refresh } = useSettings();
+  const [form, setForm] = useState(settings);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => { setForm(settings); }, [settings]);
+  const fields = [
+    ["hero_eyebrow", "Etiqueta do topo (eyebrow)"], ["hero_title1", "Título — 1ª linha"], ["hero_title2", "Título — 2ª linha (destaque)"],
+    ["hero_paragraph", "Parágrafo do hero"], ["next_live", "Próxima live (badge da agenda)"],
+    ["twitch_url", "Link da Twitch"], ["youtube_url", "Link do YouTube"], ["instagram_url", "Link do Instagram"], ["footer_status", "Status no rodapé"],
+  ];
+  const save = async (e) => {
+    e.preventDefault(); setMsg(""); setErr("");
+    try { const r = await client.put("/admin/settings", form); setSettings({ ...form, ...r.data }); await refresh(); setMsg("Site atualizado ao vivo! 🎉"); }
+    catch (ex) { setErr(ex?.response?.data?.detail || "Não foi possível salvar."); }
+  };
+  return <form className="site-editor" onSubmit={save} data-testid="site-editor">
+    {fields.map(([k, label]) => <label key={k} className="editor-field">
+      <span>{label}</span>
+      {k === "hero_paragraph"
+        ? <textarea value={form[k] || ""} data-testid={`settings-${k}`} onChange={e=>setForm({...form,[k]:e.target.value})}/>
+        : <input value={form[k] || ""} data-testid={`settings-${k}`} onChange={e=>setForm({...form,[k]:e.target.value})}/>}
+    </label>)}
+    {msg && <div className="ok-msg" data-testid="settings-success">{msg}</div>}
+    {err && <div className="err">{err}</div>}
+    <button className="btn primary" data-testid="save-settings-button"><Check size={16}/> Salvar e publicar ao vivo</button>
+  </form>;
+}
+
+function ScheduleEditor({ community }) {
+  const [form, setForm] = useState({ day: "", time: "", game: "", description: "", is_special: false });
+  const add = async (e) => {
+    e.preventDefault();
+    try { await client.post("/admin/schedule", form); setForm({ day: "", time: "", game: "", description: "", is_special: false }); community.refresh(); }
+    catch (ex) { alert(ex?.response?.data?.detail || "Falha ao adicionar."); }
+  };
+  const del = async (id) => { await client.delete(`/admin/schedule/${id}`); community.refresh(); };
+  return <div data-testid="schedule-editor">
+    <form className="editor-inline" onSubmit={add}>
+      <input required placeholder="Dia" value={form.day} data-testid="sched-day" onChange={e=>setForm({...form,day:e.target.value})}/>
+      <input required placeholder="Horário" value={form.time} data-testid="sched-time" onChange={e=>setForm({...form,time:e.target.value})}/>
+      <input required placeholder="Jogo / tema" value={form.game} data-testid="sched-game" onChange={e=>setForm({...form,game:e.target.value})}/>
+      <input placeholder="Descrição" value={form.description} data-testid="sched-desc" onChange={e=>setForm({...form,description:e.target.value})}/>
+      <label className="chk"><input type="checkbox" checked={form.is_special} data-testid="sched-special" onChange={e=>setForm({...form,is_special:e.target.checked})}/> Especial</label>
+      <button className="btn primary sm" data-testid="add-schedule-button"><Plus size={14}/> Add</button>
+    </form>
+    <div className="schedule-list">
+      {community.schedule.map(item => <div className={`schedule-row ${item.is_special ? "special" : ""}`} key={item.id}>
+        <span className="day">{item.day}</span><b className="time">{item.time}</b>
+        <div><h3>{item.game}</h3><p>{item.description}</p></div>
+        <button className="report-btn" data-testid={`delete-schedule-${item.id}`} onClick={()=>del(item.id)}><Trash2 size={13}/></button>
+      </div>)}
+      {!community.schedule.length && <div className="empty"><CalendarDays/> Nenhum horário na agenda.</div>}
+    </div>
+  </div>;
+}
+
+function PollEditor({ community }) {
+  const [q, setQ] = useState("");
+  const [opts, setOpts] = useState(["", ""]);
+  const add = async (e) => {
+    e.preventDefault();
+    try { await client.post("/admin/polls", { question: q, options: opts }); setQ(""); setOpts(["", ""]); community.refresh(); }
+    catch (ex) { alert(ex?.response?.data?.detail || "Falha ao criar enquete."); }
+  };
+  const del = async (id) => { await client.delete(`/admin/polls/${id}`); community.refresh(); };
+  return <div data-testid="poll-editor">
+    <form className="poll-create" onSubmit={add}>
+      <input required placeholder="Pergunta da enquete" value={q} data-testid="poll-question" onChange={e=>setQ(e.target.value)}/>
+      {opts.map((o, i) => <input key={i} required={i < 2} placeholder={`Opção ${i+1}`} value={o} data-testid={`poll-option-input-${i}`} onChange={e=>{ const n=[...opts]; n[i]=e.target.value; setOpts(n); }}/>)}
+      <div className="editor-inline">
+        <button type="button" className="btn outline sm" data-testid="add-option-button" onClick={()=>setOpts([...opts, ""])}><Plus size={14}/> Opção</button>
+        <button className="btn primary sm" data-testid="create-poll-button"><Check size={14}/> Criar enquete</button>
+      </div>
+    </form>
+    <div className="poll-grid">
+      {community.polls.map(p => <article className="poll" key={p.id}>
+        <button className="report-btn poll-del" data-testid={`delete-poll-${p.id}`} onClick={()=>del(p.id)}><Trash2 size={13}/></button>
+        <h3>{p.question}</h3>
+        {p.options.map(o => <div className="poll-option" key={o.text}><span>{o.text}</span><b>{o.votes}</b></div>)}
+      </article>)}
+      {!community.polls.length && <div className="empty"><Trophy/> Nenhuma enquete ativa.</div>}
+    </div>
+  </div>;
+}
+
+function Admin({ community }) {
   const { user, setModal } = useAuth();
   const nav = useNavigate();
-  const [tab, setTab] = useState("users");
+  const [tab, setTab] = useState("site");
   const [users, setUsers] = useState([]);
   const [reports, setReports] = useState([]);
   const load = async () => {
@@ -672,8 +778,8 @@ function Admin() {
     <div className="section-head">
       <div>
         <div className="eyebrow pink-text">05 / CENTRAL DE CONTROLE</div>
-        <h2>Moderação</h2>
-        <p className="subhead">Tudo sob controle, sem tirar o olho da live.</p>
+        <h2>Painel do streamer</h2>
+        <p className="subhead">Logado como <b>{user.nickname}</b> — mude o site ao vivo, sem tirar o olho da live.</p>
       </div>
     </div>
     <div className="admin-stats">
@@ -682,10 +788,16 @@ function Admin() {
       <div><b data-testid="stat-resolved">{reports.filter(r=>r.status!=="Pendente").length}</b><span>denúncias resolvidas</span></div>
     </div>
     <div className="admin-tabs">
+      <button className={tab==="site"?"active":""} onClick={()=>setTab("site")} data-testid="tab-site"><Sparkles size={15}/> Site ao vivo</button>
+      <button className={tab==="schedule"?"active":""} onClick={()=>setTab("schedule")} data-testid="tab-schedule"><CalendarDays size={15}/> Agenda</button>
+      <button className={tab==="pollsedit"?"active":""} onClick={()=>setTab("pollsedit")} data-testid="tab-pollsedit"><Trophy size={15}/> Enquetes</button>
       <button className={tab==="users"?"active":""} onClick={()=>setTab("users")} data-testid="tab-users"><Users size={15}/> Contas</button>
       <button className={tab==="reports"?"active":""} onClick={()=>setTab("reports")} data-testid="tab-reports"><Flag size={15}/> Denúncias</button>
     </div>
-    {tab === "users" ? <>
+    {tab === "site" && <SiteEditor community={community}/>}
+    {tab === "schedule" && <ScheduleEditor community={community}/>}
+    {tab === "pollsedit" && <PollEditor community={community}/>}
+    {tab === "users" && <>
       <div className="export-bar">
         <button className="btn outline sm" onClick={()=>download("csv")} data-testid="export-csv-button"><Download size={14}/> Exportar CSV</button>
         <button className="btn outline sm" onClick={()=>download("txt")} data-testid="export-txt-button"><Download size={14}/> Exportar TXT</button>
@@ -706,7 +818,8 @@ function Admin() {
           </tbody>
         </table>
       </div>
-    </> : <div className="reports">
+    </>}
+    {tab === "reports" && <div className="reports">
       {reports.map(r => <div className="report" key={r.id} data-testid={`report-row-${r.id}`}>
         <Flag size={18}/>
         <div>
@@ -729,6 +842,7 @@ function App() {
   const community = useCommunity();
   return <BrowserRouter>
     <AuthProvider>
+      <SettingsProvider>
       <Gate>
       <Layout>
         <Routes>
@@ -738,10 +852,11 @@ function App() {
           <Route path="/schedule" element={<Schedule community={community}/>}/>
           <Route path="/polls" element={<Polls community={community}/>}/>
           <Route path="/perfil/:nickname" element={<Profile/>}/>
-          <Route path="/admin" element={<Admin/>}/>
+          <Route path="/admin" element={<Admin community={community}/>}/>
         </Routes>
       </Layout>
       </Gate>
+      </SettingsProvider>
     </AuthProvider>
   </BrowserRouter>;
 }
