@@ -1,0 +1,44 @@
+{
+  "app_name": "@nethzzzz Community HQ",
+  "theme": "dark",
+  "archetype": "ELECTRIC & NEON / GAMING COMMAND CENTER",
+  "colors": {
+    "background": "#0b0c10",
+    "surface": "#12141c",
+    "surface_elevated": "#1a1d28",
+    "primary": "#9333ea",
+    "primary_glow": "#a855f7",
+    "accent_cyan": "#06b6d4",
+    "accent_pink": "#ec4899",
+    "text_main": "#f3f4f6",
+    "text_muted": "#9ca3af",
+    "border": "#272a38"
+  },
+  "typography": {
+    "heading_font": "Outfit, sans-serif",
+    "body_font": "Inter, sans-serif",
+    "mono_font": "JetBrains Mono, monospace"
+  },
+  "components": [
+    "Navbar",
+    "HeroHeader",
+    "LiveStatusWidget",
+    "GameSuggestionsBoard",
+    "ClipHubFeed",
+    "LiveSchedule",
+    "CommunityPolls",
+    "SocialLinksHub",
+    "AdminModerationPanel"
+  ],
+  "image_urls": {
+    "streamer_avatar": "https://images.unsplash.com/photo-1701281941392-fd6c2d8d652b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHw0fHxjeWJlcnB1bmslMjBnYW1pbmclMjBuZW9uJTIwcHVycGxlJTIwZ2FtZXIlMjBzdHJlYW1lciUyMHNldHVwfGVufDB8fHx8MTc4NjczNzAyNHww&ixlib=rb-4.1.0&q=85",
+    "setup_bg": "https://images.unsplash.com/photo-1616588589676-62b3bd4ff6d2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwxfHxjeWJlcnB1bmslMjBnYW1pbmclMjBuZW9uJTIwcHVycGxlJTIwZ2FtZXIlMjBzdHJlYW1lciUyMHNldHVwfGVufDB8fHx8MTc4NjczNzAyNHww&ixlib=rb-4.1.0&q=85",
+    "gaming_desk": "https://images.unsplash.com/photo-1696710257827-75e2e5954059?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwzfHxjeWJlcnB1bmslMjBnYW1pbmclMjBuZW9uJTIwcHVycGxlJTIwZ2FtZXIlMjBzdHJlYW1lciUyMHNldHVwfGVufDB8fHx8MTc4NjczNzAyNHww&ixlib=rb-4.1.0&q=85"
+  },
+  "universal_guidelines": [
+    "Always include data-testid on interactive and key elements",
+    "Use generous padding (p-6, p-8) on bordered containers",
+    "Never use pure black #000000, use tinted dark greys",
+    "Always set explicit text color on hover states"
+  ]
+}

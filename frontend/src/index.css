@@ -1,0 +1,3 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@tailwind base; @tailwind components; @tailwind utilities;
+:root{--bg:#0b0c10;--panel:#12141c;--panel2:#1a1d28;--line:#292d3c;--text:#f2f3f7;--muted:#9298a7;--cyan:#18d4dc;--pink:#ed4eab;--yellow:#facb59;--green:#71db9a}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif}button,input,textarea{font:inherit}button,a{transition:color .2s,background-color .2s,border-color .2s,transform .2s}a{color:inherit;text-decoration:none}button{cursor:pointer}::selection{background:var(--pink);color:white}
