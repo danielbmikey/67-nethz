@@ -39,16 +39,16 @@ DEFAULT_SETTINGS = {
 }
 
 def uid(): return str(uuid.uuid4())
-def strip_id(doc): return {k: v for k, v in doc.items() if k != "_id"} if doc else None
-def ts(): return datetime.now(timezone.utc).timestamp()
-def token_for(sub, role, days=1): return jwt.encode({"sub": sub, "role": role, "exp": ts() + days * 86400}, JWT_SECRET, algorithm="HS256")
-def hash_pw(pw): return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
-def check_pw(pw, hashed): return bcrypt.checkpw(pw.encode(), hashed.encode())
+def strip_id(doc):  {k: v for k, v in doc.items() if k != "_id"} if doc else None
+def ts():  datetime.now(timezone.utc).timestamp()
+def token_for(sub, role, days=1):  jwt.encode({"sub": sub, "role": role, "exp": ts() + days * 86400}, JWT_SECRET, algorithm="HS256")
+def hash_pw(pw):  bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+def check_pw(pw, hashed):  bcrypt.checkpw(pw.encode(), hashed.encode())
 def client_ip(request: Request) -> str:
     fwd = request.headers.get("x-forwarded-for")
-    if fwd: return fwd.split(",")[0].strip()
+    if fwd:  fwd.split(",")[0].strip()
     real = request.headers.get("x-real-ip")
-    return real or (request.client.host if request.client else "0.0.0.0")
+     real or (request.client.host if request.client else "0.0.0.0")
 
 # ---------- Email (Resend) ----------
 async def send_email(to, subject, html):
@@ -323,7 +323,7 @@ async def signup(item: Signup, request: Request, response: Response):
     sent = await send_email(email, "Confirme seu email — NETHZZZZ HQ", code_email_html("Bem-vindo à tropa!", f"E aí, <b>{nickname}</b>! Use o código abaixo pra verificar sua conta no quartel-general.", code))
     token = token_for(user["id"], "viewer")
     response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=86400)
-    return {"id": user["id"], "email": email, "nickname": nickname, "role": "viewer", "is_verified": False, "verification_sent": sent, "token": token}
+    return {"id": user["id"], "email": email, "nickname": nickname, "role": "viewer", "is_verified": False, "verification_sent": sent,"verification_code": None if sent else code, "token": token}
 
 @api.post("/auth/login")
 async def login(item: Login, request: Request, response: Response):
