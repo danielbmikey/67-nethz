@@ -48,7 +48,7 @@ def client_ip(request: Request) -> str:
     fwd = request.headers.get("x-forwarded-for")
     if fwd:  fwd.split(",")[0].strip()
     real = request.headers.get("x-real-ip")
-     real or (request.client.host if request.client else "0.0.0.0")
+    real or (request.client.host if request.client else "0.0.0.0")
 
 # ---------- Email (Resend) ----------
 async def send_email(to, subject, html):
