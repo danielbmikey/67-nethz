@@ -196,6 +196,8 @@ function VerifyBanner() {
   const [code, setCode] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [shownCode, setShownCode] = useState("");
+  useEffect(() => { if (user?.verification_code) setShownCode(user.verification_code); }, [user]);
   if (!user || user.role === "admin" || user.is_verified) return null;
   const verify = async (e) => {
     e.preventDefault(); setErr(""); setMsg("");
@@ -204,33 +206,25 @@ function VerifyBanner() {
   };
   const resendCode = async () => {
     setErr(""); setMsg("");
-    try { await client.post("/auth/resend-verification"); setMsg("Código reenviado! Confira seu email."); }
-    catch (ex) { setErr(ex?.response?.data?.detail || "Não foi possível reenviar."); }
+    try {
+      const r = await client.post("/auth/resend-verification");
+      if (r.data.code) { setShownCode(r.data.code); setMsg("Novo código gerado! Use o código abaixo."); }
+      else setMsg("Código reenviado! Confira seu email.");
+    } catch (ex) { setErr(ex?.response?.data?.detail || "Não foi possível reenviar."); }
   };
+  const useShownCode = () => { setCode(shownCode); };
   return <div className="verify-banner" data-testid="verify-banner">
     <Mail size={16}/>
-    <span>Verifique seu email pra confirmar sua conta na tropa.</span>
+    <span>Confirme sua conta na tropa com o código de verificação.</span>
+    {shownCode && <button type="button" className="verify-code-chip" data-testid="verify-shown-code" onClick={useShownCode} title="Clique pra preencher">CÓDIGO: <b>{shownCode}</b></button>}
     <form onSubmit={verify}>
       <input maxLength={6} placeholder="Código de 6 dígitos" value={code} onChange={e=>setCode(e.target.value)} data-testid="verify-code-input"/>
       <button className="btn primary sm" data-testid="verify-submit-button"><ShieldCheck size={14}/> Verificar</button>
-      <button type="button" className="btn outline sm" onClick={resendCode} data-testid="resend-verification-button">Reenviar</button>
+      <button type="button" className="btn outline sm" onClick={resendCode} data-testid="resend-verification-button">Novo código</button>
     </form>
     {msg && <em className="ok" data-testid="verify-success">{msg}</em>}
     {err && <em className="bad" data-testid="verify-error">{err}</em>}
   </div>;
-}
-
-function useCommunity() {
-  const [data, setData] = useState({ games: [], clips: [], polls: [], schedule: [], stats: { members: 0 }, ranking: [] });
-  const [loading, setLoading] = useState(true);
-  const refresh = async () => {
-    try {
-      const [games, clips, polls, schedule, stats, ranking] = await Promise.all(["games","clips","polls","schedule","stats","ranking"].map(x => client.get(`/${x}`)));
-      setData({ games: games.data, clips: clips.data, polls: polls.data, schedule: schedule.data, stats: stats.data, ranking: ranking.data });
-    } finally { setLoading(false); }
-  };
-  useEffect(() => { refresh(); }, []);
-  return { ...data, loading, refresh };
 }
 
 function Nav() {
