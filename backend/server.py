@@ -517,7 +517,7 @@ async def admin_delete_user(user_id: str, _: dict = Depends(admin_only)):
     return {"success": True}
 
 app.include_router(api)
-app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=[os.environ["FRONTEND_URL"]], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
