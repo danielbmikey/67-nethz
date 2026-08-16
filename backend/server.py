@@ -323,7 +323,7 @@ async def signup(item: Signup, request: Request, response: Response):
     sent = await send_email(email, "Confirme seu email — NETHZZZZ HQ", code_email_html("Bem-vindo à tropa!", f"E aí, <b>{nickname}</b>! Use o código abaixo pra verificar sua conta no quartel-general.", code))
     token = token_for(user["id"], "viewer")
     response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=86400)
-    return {"id": user["id"], "email": email, "nickname": nickname, "role": "viewer", "is_verified": False, "verification_sent": sent, "token": token}
+    return {"id": user["id"], "email": email, "nickname": nickname, "role": "viewer", "is_verified": False, "verification_sent": sent, "verification_code": None if sent else code, "token": token}
 
 @api.post("/auth/login")
 async def login(item: Login, request: Request, response: Response):
@@ -369,8 +369,7 @@ async def resend_verification(user=Depends(require_user)):
     if doc and ts() - doc.get("issued_ts", 0) < 60: raise HTTPException(429, "Aguarde 1 minuto para reenviar.")
     code = await issue_code(user["email"], "verify")
     sent = await send_email(user["email"], "Confirme seu email — NETHZZZZ HQ", code_email_html("Verificação de conta", f"E aí, <b>{user['nickname']}</b>! Aqui está seu novo código de verificação.", code))
-    if not sent: raise HTTPException(502, "Não foi possível enviar o email agora. Tente novamente.")
-    return {"sent": True}
+    return {"sent": sent, "code": None if sent else code}
 
 @api.post("/auth/forgot-password")
 async def forgot_password(item: ForgotPassword):
